@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,9 +19,6 @@
 <body>
     <div class="background-effects">
         <canvas id="bgCanvas"></canvas>
-        <div class="glow-orb orb-1"></div>
-        <div class="glow-orb orb-2"></div>
-        <div class="glow-orb orb-3"></div>
     </div>
 
     <div class="app-container">
@@ -38,13 +35,13 @@
                 <img src="/static/images/logo.png" alt="Funky Moose Logo" class="app-logo">
             </div>
             <h1>Funky Moose Mix Analyzer <span>Pro</span></h1>
-            <p>KI Audio Analyse Dashboard • by Uwe Arthur Felchle</p>
+            <p>Audio Intelligence Dashboard • by Uwe Arthur Felchle</p>
         </header>
 
         <main>
             <section class="upload-section" id="uploadSection">
                 <div class="upload-options">
-                    <label for="genreSelect" style="color: var(--text-muted); font-size: 0.95rem;">Genre Profil:</label>
+                    <label for="genreSelect" class="field-label">Genre Profil:</label>
                     <select id="genreSelect" class="glass-input">
                         <option value="Pop">Pop</option>
                         <option value="EDM / Electronic">EDM / Electronic</option>
@@ -59,8 +56,9 @@
                         <option value="Podcast / Spoken Word">Podcast / Spoken Word</option>
                     </select>
                 </div>
+                <div id="statusMessage" class="status-message hidden" role="status" aria-live="polite"></div>
                 
-                <div class="upload-box" id="dropZone">
+                <div class="upload-box" id="dropZone" role="button" tabindex="0" aria-label="Audio file upload">
                     <i class="fa-solid fa-cloud-arrow-up"></i>
                     <h2>Drag & Drop your audio file</h2>
                     <p>or click to browse your files</p>
@@ -69,29 +67,63 @@
                 </div>
                 
                 <div class="loading-state hidden" id="loadingState">
-                    <div class="spinner"></div>
-                    <h3>Analyzing your mix...</h3>
-                    <p>Running audio processing models & VST matching</p>
+                    <div class="spinner-container">
+                        <div class="spinner"></div>
+                        <div class="spinner-core"></div>
+                    </div>
+                    <h3 id="loadingTitle">Analyzing your mix...</h3>
+                    <p id="loadingSub">Running audio processing models & VST matching</p>
+                    <div class="analysis-progress-container">
+                        <div class="analysis-progress-bar" id="analysisProgressBar"></div>
+                    </div>
+                    <div class="analysis-steps" id="analysisSteps" aria-hidden="true">
+                        <!-- Steps will be injected or updated via JS -->
+                    </div>
                 </div>
             </section>
 
             <section class="results-section hidden" id="resultsSection">
                 <div class="results-header">
                     <div>
-                        <h2>Analysis Results for <span id="filenameDisplay">filename.wav</span></h2>
-                        <audio id="audioPlayer" controls class="custom-player"></audio>
+                        <h2><span id="resultsPrefix">Analysis Results for </span><span id="filenameDisplay">filename.wav</span></h2>
+                        <div class="player-controls">
+                            <audio id="audioPlayer" controls class="custom-player"></audio>
+                            <div class="ab-comparison hidden" id="abToggleContainer">
+                                <label class="ab-label">A/B Compare</label>
+                                <div class="ab-switch">
+                                    <button id="btnA" class="ab-btn active">Mix (A)</button>
+                                    <button id="btnB" class="ab-btn">Ref (B)</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div id="actionButtons" style="display: flex; gap: 10px; align-items: center;">
+                    <div id="actionButtons" class="action-buttons">
+                        <button class="btn-secondary" onclick="copyDAWNotes()">
+                            <i class="fa-solid fa-copy"></i> <span id="copyNotesText">DAW Notes</span>
+                        </button>
                         <select id="compareSelect" class="glass-input" style="display: none;">
                             <option value="">Compare...</option>
                         </select>
                         <button id="exportPdfBtn" class="btn-secondary"><i class="fa-solid fa-file-pdf"></i> <span id="exportText">Export PDF</span></button>
-                        <button id="newAnalysisBtn" class="btn-primary">New Analysis</button>
+                        <button id="newAnalysisBtn" class="btn-primary"><i class="fa-solid fa-rotate-right"></i> <span>New Analysis</span></button>
                     </div>
                 </div>
+
+                <!-- Mastering Assistant Section -->
+                <div class="mastering-assistant hidden" id="masteringAssistant">
+                    <div class="assistant-header">
+                        <h3><i class="fa-solid fa-magic"></i> AI Mastering Assistant</h3>
+                        <p>Top priority actions for your mix balance</p>
+                    </div>
+                    <div class="priority-actions" id="priorityActions">
+                        <!-- Filled via JS -->
+                    </div>
+                </div>
+
+                <div id="summaryStrip" class="summary-strip hidden"></div>
                 
                 <div id="printHeader" class="hidden" style="margin-bottom: 30px;">
-                    <img src="/static/images/logo.png" alt="Logo" style="width: 80px; height: 80px; border-radius: 12px; float: left; margin-right: 20px;">
+                    <img src="/static/images/logo.png" alt="Logo" style="width: 80px; height: 80px; border-radius: 8px; float: left; margin-right: 20px;">
                     <div style="float: left; padding-top: 10px;">
                         <h2 style="margin: 0; font-family: 'Outfit', sans-serif; font-size: 2rem; color: #fff;">Funky Moose <span style="color: #00f2fe;">Pro</span></h2>
                         <p style="margin: 5px 0 0; color: #9ba1a6; font-family: 'Inter', sans-serif;">Client Mix Analysis Report</p>

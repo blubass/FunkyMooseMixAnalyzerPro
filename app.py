@@ -88,6 +88,15 @@ GENRE_CURVES = {
     "General": [(20, -5), (100, 0), (1000, -12), (5000, -20), (20000, -40)],
 }
 
+BAND_DEFS = [
+    ("Sub", 20, 60),
+    ("Bass", 60, 250),
+    ("Low-Mids", 250, 500),
+    ("Mids", 500, 2000),
+    ("Presence", 2000, 6000),
+    ("Air", 6000, 20000),
+]
+
 audio_dir = os.path.join(data_dir, "audio")
 image_dir = os.path.join(data_dir, "images")
 snippet_dir = os.path.join(data_dir, "snippets")
@@ -166,6 +175,52 @@ def safe_remove(path):
     except OSError:
         pass
 
+def build_slices_meta(total):
+    slices_meta = [
+        {"tag": "Intro", "start": 0.0, "duration": min(SLICE_SEC, total)}
+    ]
+    if total > SLICE_SEC:
+        start = max(0.0, (total / 2.0) - (SLICE_SEC / 2.0))
+        slices_meta.append({"tag": "Middle", "start": start, "duration": min(SLICE_SEC, total - start)})
+    if total > SLICE_SEC * 1.5:
+        start = max(0.0, total - SLICE_SEC)
+        slices_meta.append({"tag": "Outro", "start": start, "duration": min(SLICE_SEC, total - start)})
+    return slices_meta
+
+def media_filename_from_url(url, prefix):
+    if not isinstance(url, str) or not url.startswith(prefix):
+        return None
+    return os.path.basename(url.split("?", 1)[0])
+
+def media_files_from_analysis(data):
+    files = {"audio": set(), "images": set(), "snippets": set()}
+    if not isinstance(data, dict):
+        return files
+    audio_name = media_filename_from_url(data.get("audio_url"), "/media/audio/")
+    if audio_name:
+        files["audio"].add(audio_name)
+    for slice_data in data.get("slices", []):
+        if not isinstance(slice_data, dict):
+            continue
+        for key in ("waveform_url", "spectrum_url"):
+            image_name = media_filename_from_url(slice_data.get(key), "/media/images/")
+            if image_name:
+                files["images"].add(image_name)
+    return files
+
+def merge_media_files(target, source):
+    for key, names in source.items():
+        target.setdefault(key, set()).update(names)
+
+def remove_analysis_media(data):
+    files = media_files_from_analysis(data)
+    for filename in files["audio"]:
+        safe_remove(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+    for filename in files["images"]:
+        safe_remove(os.path.join(app.config['IMAGE_FOLDER'], filename))
+    for filename in files["snippets"]:
+        safe_remove(os.path.join(app.config['SNIPPET_FOLDER'], filename))
+
 def probe_duration(path):
     res = subprocess.run(
         [FFPROBE_CMD, "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", path],
@@ -206,7 +261,7 @@ def mean_available(values):
 
 BAND_ALIASES = {
     "Bässe": {"Bässe", "Sub", "Bass"},
-    "Mitten": {"Mitten", "Low-Mids", "Mids", "Presence"},
+    "Mitten": {"Mitten", "Mids", "Presence"},
     "Höhen": {"Höhen", "Air"},
 }
 
@@ -242,16 +297,44 @@ def get_mono(samples):
         return samples.mean(axis=1)
     return samples
 
+def dbfs(value):
+    return 20 * np.log10(max(float(value), 1e-12))
+
+def signal_level_metrics(signal):
+    signal = np.asarray(signal, dtype=np.float32)
+    if signal.size == 0:
+        return {"rms_db": -120.0, "peak_db": -120.0, "crest_db": 0.0}
+    rms = float(np.sqrt(np.mean(signal ** 2)))
+    peak = float(np.max(np.abs(signal)))
+    rms_db = float(dbfs(rms))
+    peak_db = float(dbfs(peak))
+    return {
+        "rms_db": rms_db,
+        "peak_db": peak_db,
+        "crest_db": peak_db - rms_db,
+    }
+
 def levels(samples):
     mono = get_mono(samples)
     if mono.size == 0:
-        return -120.0, -120.0, 0.0, {"width_pct": 0.0, "ms_ratio_db": 0.0}
-        
-    rms = float(np.sqrt(np.mean(mono**2)))
-    peak = float(np.max(np.abs(mono)))
-    rms_db = 20*np.log10(max(rms, 1e-12))
-    peak_db = 20*np.log10(max(peak, 1e-12))
-    
+        empty_details = {
+            "mono": {"rms_db": -120.0, "peak_db": -120.0, "crest_db": 0.0},
+            "left": None,
+            "right": None,
+            "max_channel_peak_db": -120.0,
+            "combined_rms_db": -120.0,
+        }
+        return -120.0, -120.0, 0.0, {"width_pct": 0.0, "ms_ratio_db": 0.0}, empty_details
+
+    mono_metrics = signal_level_metrics(mono)
+    level_details = {
+        "mono": {key: round(value, 3) for key, value in mono_metrics.items()},
+        "left": None,
+        "right": None,
+        "max_channel_peak_db": round(mono_metrics["peak_db"], 3),
+        "combined_rms_db": round(mono_metrics["rms_db"], 3),
+    }
+
     # Mid/Side Analysis
     mid_side = {"width_pct": 0.0, "ms_ratio_db": 0.0}
     if len(samples.shape) > 1 and samples.shape[1] == 2:
@@ -263,8 +346,22 @@ def levels(samples):
         ms_ratio = side_rms / mid_rms
         mid_side["width_pct"] = round(float(ms_ratio * 100.0), 1)
         mid_side["ms_ratio_db"] = round(float(20 * np.log10(ms_ratio)), 2)
-        
-    return rms_db, peak_db, peak_db - rms_db, mid_side
+
+        left_metrics = signal_level_metrics(L)
+        right_metrics = signal_level_metrics(R)
+        combined_rms = float(np.sqrt(np.mean(samples ** 2)))
+        max_channel_peak_db = max(left_metrics["peak_db"], right_metrics["peak_db"])
+        level_details.update({
+            "left": {key: round(value, 3) for key, value in left_metrics.items()},
+            "right": {key: round(value, 3) for key, value in right_metrics.items()},
+            "max_channel_peak_db": round(max_channel_peak_db, 3),
+            "combined_rms_db": round(float(dbfs(combined_rms)), 3),
+        })
+
+    rms_db = level_details["combined_rms_db"]
+    peak_db = level_details["max_channel_peak_db"]
+    crest = peak_db - rms_db
+    return rms_db, peak_db, crest, mid_side, level_details
 
 def parse_float(value):
     try:
@@ -352,16 +449,10 @@ def band_distribution(samples, sr, genre="Pop"):
     if len(samples.shape) > 1 and samples.shape[1] == 2:
         side = (samples[:, 0] - samples[:, 1]) / 2.0
         
-    band_defs = [
-        ("Bässe", 20, 250),
-        ("Mitten", 250, 4000),
-        ("Höhen", 4000, 20000),
-    ]
-    
     if mono.size == 0:
         empty_features = {"spectral_centroid_hz": None, "spectral_rolloff_hz": None}
         return (
-            [{"name": name, "range": f"{lo}-{hi}Hz", "percent": 0.0} for name,lo,hi in band_defs],
+            [{"name": name, "range": f"{lo}-{hi}Hz", "percent": 0.0} for name, lo, hi in BAND_DEFS],
             np.array([20.0, 20000.0]),
             np.array([-120.0, -120.0]),
             None,
@@ -404,7 +495,7 @@ def band_distribution(samples, sr, genre="Pop"):
             "spectral_centroid_hz": round(centroid, 1),
             "spectral_rolloff_hz": round(float(analysis_freqs[rolloff_idx]), 1),
         }
-    bands = [{"name": name, "range": f"{lo}-{hi}Hz", "percent": round(pct(lo,hi), 2)} for name,lo,hi in band_defs]
+    bands = [{"name": name, "range": f"{lo}-{hi}Hz", "percent": round(pct(lo, hi), 2)} for name, lo, hi in BAND_DEFS]
     
     # Resonance Detection (peaks > 7.5dB above local average)
     all_res = []
@@ -420,7 +511,7 @@ def band_distribution(samples, sr, genre="Pop"):
 
     # Limit to top resonance per band as requested
     resonances = []
-    for name, lo, hi in band_defs:
+    for name, lo, hi in BAND_DEFS:
         band_res = [r for r in all_res if lo <= r["freq"] < hi]
         if band_res:
             top = max(band_res, key=lambda x: x["gain"])
@@ -437,8 +528,6 @@ def band_distribution(samples, sr, genre="Pop"):
         target_curve.append({"f": f, "v": v + avg_level + 10}) # Offset for visualization
 
     return bands, freqs, mag_db, side_mag_db, features, resonances, target_curve
-
-current_genre_context = "Pop" # Temporary global for the distribution function
 
 def audio_quality_metrics(samples, sr, spectral_features):
     mono = get_mono(samples)
@@ -482,14 +571,12 @@ def plot_waveform_spectrum(samples, sr, freqs, mag_db, side_mag_db, target_curve
     ax.patch.set_alpha(0.0)
     plt.tight_layout(); plt.savefig(w_png, dpi=120, transparent=True); plt.close()
     
-    # Simplified 3-band analysis
-    bands_cfg = [("Bässe", 20, 250), ("Mitten", 250, 4000), ("Höhen", 4000, 20000)]
-    names = [b[0] for b in bands_cfg]
+    names = [b[0] for b in BAND_DEFS]
     
     # Calculate average levels for Mix and Side
     vals = []
     side_vals = []
-    for _, lo, hi in bands_cfg:
+    for _, lo, hi in BAND_DEFS:
         b_mask = (freqs >= lo) & (freqs < hi)
         if np.any(b_mask):
             vals.append(float(np.mean(mag_db[b_mask])))
@@ -509,9 +596,11 @@ def plot_waveform_spectrum(samples, sr, freqs, mag_db, side_mag_db, target_curve
     # Optional target line from target_curve
     if target_curve:
         target_vals = []
-        for _, lo, hi in bands_cfg:
-            t_pts = [p["v"] for p in target_curve if lo <= p["f"] <= hi]
-            target_vals.append(float(np.mean(t_pts)) if t_pts else -60.0)
+        curve_freqs = np.array([p["f"] for p in target_curve], dtype=np.float64)
+        curve_vals = np.array([p["v"] for p in target_curve], dtype=np.float64)
+        for _, lo, hi in BAND_DEFS:
+            center = np.sqrt(lo * hi)
+            target_vals.append(float(np.interp(np.log10(center), np.log10(curve_freqs), curve_vals)))
         ax.bar(x, target_vals, width*2.2, color="white", alpha=0.05, bottom=-110)
         ax.hlines(target_vals, x - width, x + width, colors="white", linestyles="--", alpha=0.3)
 
@@ -552,14 +641,14 @@ def analyze_slice(src, start, duration, tag, req_id, genre="Pop"):
                 correlation = float(np.mean((L - np.mean(L)) * (R - np.mean(R))) / (std_l * std_r))
                 correlation = max(-1.0, min(1.0, correlation))
                 
-        rms_db, peak_db, crest, mid_side = levels(samples)
+        rms_db, peak_db, crest, mid_side, level_details = levels(samples)
         loudness = loudness_snapshot(src, start=start, duration=duration)
         bands, freqs, mag_db, side_mag_db, spectral_features, resonances, target_curve = band_distribution(samples, sr, genre)
         quality = audio_quality_metrics(samples, sr, spectral_features)
         w_url, s_url = plot_waveform_spectrum(samples, sr, freqs, mag_db, side_mag_db, target_curve, req_id, tag)
         return dict(tag=tag, start=start, duration=duration, sr=sr,
                     rms_db=rms_db, peak_db=peak_db, crest_db=crest,
-                    correlation=correlation, mid_side=mid_side,
+                    correlation=correlation, mid_side=mid_side, levels=level_details,
                     I=loudness.get("I"), LRA=loudness.get("LRA"), TP=loudness.get("TP"), SP=peak_db if loudness.get("SP") is None else loudness.get("SP"),
                     loudness_method=loudness.get("method"),
                     bands=bands, quality=quality, resonances=resonances, target_curve=target_curve,
@@ -567,7 +656,7 @@ def analyze_slice(src, start, duration, tag, req_id, genre="Pop"):
     finally:
         safe_remove(snippet)
 
-def get_insights(slices, genre, lang="de"):
+def get_insights(slices, genre, lang="de", track_loudness=None):
     insights = []
     target_slice = next((s for s in slices if s['tag'] == 'Middle'), slices[0])
     profile = get_genre_profile(genre)
@@ -575,13 +664,13 @@ def get_insights(slices, genre, lang="de"):
     # Helper to create priority actions
     priority_actions = []
     
-    I = target_slice['I'] if target_slice['I'] is not None else -14
+    track_lufs = (track_loudness or {}).get("I")
+    I = track_lufs if track_lufs is not None else target_slice['I'] if target_slice['I'] is not None else -14
     crest = target_slice['crest_db'] if target_slice['crest_db'] is not None else 10
-    bands = target_slice['bands']
     correlation = target_slice.get('correlation', 1.0)
     quality = target_slice.get("quality", {})
     low_end = band_percent(target_slice, ("Bässe",))
-    presence_pct = band_percent(target_slice, ("Mitten",))
+    presence_pct = band_percent(target_slice, ("Presence",))
     brilliance_pct = band_percent(target_slice, ("Höhen",))
     lufs_low, lufs_high = profile["lufs_range"]
     crest_low, crest_high = profile["crest_range"]
@@ -756,13 +845,15 @@ def analysis_confidence(slices, total_duration):
         label = "low"
     return {"score": score, "label": label, "issues": issues}
 
-def build_summary(slices, genre, total_duration):
+def build_summary(slices, genre, total_duration, track_loudness=None):
     target_slice = next((s for s in slices if s['tag'] == 'Middle'), slices[0])
     profile = get_genre_profile(genre)
     aggregate = aggregate_slices(slices)
     confidence = analysis_confidence(slices, total_duration)
     target_lufs = profile["target_lufs"]
-    measured_lufs = aggregate.get("I") if aggregate.get("I") is not None else target_slice.get('I')
+    track_lufs = (track_loudness or {}).get("I")
+    measured_lufs = track_lufs if track_lufs is not None else aggregate.get("I") if aggregate.get("I") is not None else target_slice.get('I')
+    loudness_scope = "full-track" if track_lufs is not None else "slice-average"
     lufs_delta = None if measured_lufs is None else round(measured_lufs - target_lufs, 1)
     correlation = aggregate.get("correlation") if aggregate.get("correlation") is not None else target_slice.get('correlation', 1.0)
     low_end = aggregate.get("low_end_percent") if aggregate.get("low_end_percent") is not None else band_percent(target_slice, ("Bässe",))
@@ -786,6 +877,7 @@ def build_summary(slices, genre, total_duration):
         "slice": target_slice.get('tag'),
         "target_lufs": target_lufs,
         "measured_lufs": measured_lufs,
+        "loudness_scope": loudness_scope,
         "lufs_delta": lufs_delta,
         "correlation": round(correlation, 2),
         "low_end_percent": round(low_end, 1),
@@ -799,9 +891,44 @@ def build_summary(slices, genre, total_duration):
 
 def cleanup_old_files():
     now = time.time()
-    for directory in [app.config['UPLOAD_FOLDER'], app.config['IMAGE_FOLDER'], app.config['SNIPPET_FOLDER']]:
+    referenced = {"audio": set(), "images": set(), "snippets": set()}
+    stale_ids = []
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        ttl_arg = f"-{MEDIA_TTL_SECONDS} seconds"
+        stale_rows = conn.execute(
+            "SELECT id, data FROM analyses WHERE is_reference = 0 AND timestamp < datetime('now', ?)",
+            (ttl_arg,),
+        ).fetchall()
+
+        for row in stale_rows:
+            try:
+                remove_analysis_media(json.loads(row["data"]))
+                stale_ids.append(row["id"])
+            except (TypeError, json.JSONDecodeError):
+                stale_ids.append(row["id"])
+
+        if stale_ids:
+            conn.executemany("DELETE FROM analyses WHERE id = ?", [(item_id,) for item_id in stale_ids])
+
+        remaining_rows = conn.execute("SELECT data FROM analyses").fetchall()
+
+    for row in remaining_rows:
+        try:
+            merge_media_files(referenced, media_files_from_analysis(json.loads(row["data"])))
+        except (TypeError, json.JSONDecodeError):
+            continue
+
+    cleanup_targets = [
+        (app.config['UPLOAD_FOLDER'], "audio"),
+        (app.config['IMAGE_FOLDER'], "images"),
+        (app.config['SNIPPET_FOLDER'], "snippets"),
+    ]
+    for directory, media_type in cleanup_targets:
         for f in glob.glob(os.path.join(directory, '*')):
-            if os.path.isfile(f) and now - os.path.getmtime(f) > MEDIA_TTL_SECONDS:
+            filename = os.path.basename(f)
+            if os.path.isfile(f) and filename not in referenced[media_type] and now - os.path.getmtime(f) > MEDIA_TTL_SECONDS:
                 safe_remove(f)
 
 @app.route("/")
@@ -849,11 +976,7 @@ def upload():
     genre = request.form.get('genre', DEFAULT_GENRE)
     if genre not in GENRE_PROFILES:
         genre = FALLBACK_GENRE
-    lang = request.form.get('lang', 'de')
-    
-    global current_genre_context
-    current_genre_context = genre
-    
+
     if file.filename == '':
         return json_error("Empty file.", 400)
     if not allowed_audio_file(file.filename):
@@ -872,14 +995,9 @@ def upload():
     except Exception:
         safe_remove(save_path)
         return json_error("Could not determine duration.", 400)
-        
-    slices_meta = [
-        {"tag": "Intro", "start": 0.0, "duration": min(SLICE_SEC, total)}
-    ]
-    if total > SLICE_SEC:
-        slices_meta.append({"tag": "Middle", "start": max(0.0, (total/2.0)-(SLICE_SEC/2.0)), "duration": min(SLICE_SEC, total - max(0.0, (total/2.0)-(SLICE_SEC/2.0)))})
-    if total > SLICE_SEC * 1.5:
-        slices_meta.append({"tag": "Outro", "start": max(0.0, total - SLICE_SEC), "duration": min(SLICE_SEC, SLICE_SEC)})
+
+    slices_meta = build_slices_meta(total)
+    track_loudness = loudness_snapshot(save_path, start=0, duration=total)
         
     # Store initial analysis record
     initial_data = {
@@ -888,6 +1006,8 @@ def upload():
         "genre": genre,
         "total_duration": total,
         "slices": [],
+        "slices_meta": slices_meta,
+        "track_loudness": track_loudness,
         "audio_url": f"/media/audio/{save_filename}"
     }
     
@@ -902,20 +1022,20 @@ def upload():
         "filename": display_filename,
         "total_duration": total,
         "slices_meta": slices_meta,
+        "track_loudness": track_loudness,
         "audio_url": f"/media/audio/{save_filename}"
     })
 
 @app.route("/analyze_slice/<req_id>/<tag>", methods=["POST"])
 def analyze_slice_endpoint(req_id, tag):
     with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.execute('SELECT data, filename, genre FROM analyses WHERE id = ?', (req_id,))
+        cursor = conn.execute('SELECT data, genre FROM analyses WHERE id = ?', (req_id,))
         row = cursor.fetchone()
         if not row:
             return json_error("Analysis session not found.", 404)
         
         current_data = json.loads(row[0])
-        display_filename = row[1]
-        genre = row[2]
+        genre = row[1]
     
     save_filename = os.path.basename(current_data["audio_url"])
     save_path = os.path.join(app.config['UPLOAD_FOLDER'], save_filename)
@@ -923,16 +1043,13 @@ def analyze_slice_endpoint(req_id, tag):
     if not os.path.exists(save_path):
         return json_error("Source file no longer exists.", 410)
     
-    # Find metadata for this tag
     total = current_data["total_duration"]
-    start = 0.0
-    duration = min(SLICE_SEC, total)
-    if tag == "Middle":
-        start = max(0.0, (total/2.0)-(SLICE_SEC/2.0))
-        duration = min(SLICE_SEC, total - start)
-    elif tag == "Outro":
-        start = max(0.0, total - SLICE_SEC)
-        duration = min(SLICE_SEC, total - start)
+    slices_meta = current_data.get("slices_meta") or build_slices_meta(total)
+    requested_meta = next((item for item in slices_meta if item["tag"] == tag), None)
+    if not requested_meta:
+        return json_error("Unknown analysis slice.", 400)
+    start = requested_meta["start"]
+    duration = requested_meta["duration"]
         
     try:
         slice_result = analyze_slice(save_path, start, duration, tag, req_id, genre)
@@ -944,6 +1061,10 @@ def analyze_slice_endpoint(req_id, tag):
         # Get latest data again to avoid race conditions
         cursor = conn.execute('SELECT data FROM analyses WHERE id = ?', (req_id,))
         latest_data = json.loads(cursor.fetchone()[0])
+        latest_data["slices"] = [
+            item for item in latest_data.get("slices", [])
+            if item.get("tag") != tag
+        ]
         latest_data["slices"].append(slice_result)
         
         # Sort slices by start time to maintain consistent UI order
@@ -952,13 +1073,15 @@ def analyze_slice_endpoint(req_id, tag):
         # If this was the last slice (or if we have enough to summarize), update summary/insights
         # For simplicity, we recalculate summary and insights whenever a slice is added
         lang = request.args.get('lang', 'de')
-        latest_data["summary"] = build_summary(latest_data["slices"], latest_data["genre"], total)
+        latest_data.setdefault("slices_meta", slices_meta)
+        track_loudness = latest_data.get("track_loudness")
+        latest_data["summary"] = build_summary(latest_data["slices"], latest_data["genre"], total, track_loudness)
         
         # New Insights Structure
-        insights_payload = get_insights(latest_data["slices"], latest_data["genre"], "de")
+        insights_payload = get_insights(latest_data["slices"], latest_data["genre"], "de", track_loudness)
         latest_data["insights_by_lang"] = {
             "de": insights_payload,
-            "en": get_insights(latest_data["slices"], latest_data["genre"], "en"),
+            "en": get_insights(latest_data["slices"], latest_data["genre"], "en", track_loudness),
         }
         latest_data["priority_actions"] = insights_payload.get("priority_actions", [])
         latest_data["insights"] = latest_data["insights_by_lang"].get(lang, latest_data["insights_by_lang"]["de"]).get("insights", [])
@@ -967,7 +1090,7 @@ def analyze_slice_endpoint(req_id, tag):
         
     return jsonify({
         "slice": slice_result,
-        "is_complete": len(latest_data["slices"]) >= 3 or (total <= SLICE_SEC and len(latest_data["slices"]) >= 1) or (total <= SLICE_SEC*1.5 and len(latest_data["slices"]) >= 2),
+        "is_complete": {item["tag"] for item in slices_meta}.issubset({item.get("tag") for item in latest_data["slices"]}),
         "current_analysis": latest_data
     })
 

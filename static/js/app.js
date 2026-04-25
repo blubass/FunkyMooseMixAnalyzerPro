@@ -48,6 +48,11 @@ const i18n = {
         dyn: 'Dynamik',
         rms: 'RMS Pegel',
         peak: 'Spitzenpegel',
+        'left-peak': 'L Peak',
+        'right-peak': 'R Peak',
+        'mono-peak': 'Mono-Summe Peak',
+        'stereo-balance': 'Balance L/R',
+        'dc-offset': 'DC Offset',
         crest: 'Crest-Faktor',
         stereo: 'Stereo Bild',
         correlation: 'Phasenkorrelation',
@@ -92,9 +97,15 @@ const i18n = {
         width: 'Stereo Breite',
         'ms-ratio': 'M/S Verhältnis',
         'copy-notes': 'DAW Notizen',
+        copied: 'Kopiert!',
+        'copy-wait': 'Bitte warte, bis der erste Schnitt analysiert wurde.',
         'ab-compare': 'A/B Vergleich',
         'priority-actions': 'Top Prioritäten',
-        'resonance-detected': 'Resonanz bei'
+        'resonance-detected': 'Resonanz bei',
+        'full-track': 'Gesamttrack',
+        'slice-average': 'Schnitt-Mittel',
+        'mastering-title': 'Mastering Assistant',
+        'mastering-sub': 'Top-Prioritäten für Balance und Master'
     },
     en: {
         subtitle: 'Audio Intelligence Dashboard - by Uwe Arthur Felchle',
@@ -113,6 +124,11 @@ const i18n = {
         dyn: 'Dynamics',
         rms: 'RMS Level',
         peak: 'Peak Level',
+        'left-peak': 'L Peak',
+        'right-peak': 'R Peak',
+        'mono-peak': 'Mono Sum Peak',
+        'stereo-balance': 'L/R Balance',
+        'dc-offset': 'DC Offset',
         crest: 'Crest Factor',
         stereo: 'Stereo Field',
         correlation: 'Phase Correlation',
@@ -157,14 +173,43 @@ const i18n = {
         width: 'Stereo Width',
         'ms-ratio': 'M/S Ratio',
         'copy-notes': 'DAW Notes',
+        copied: 'Copied!',
+        'copy-wait': 'Please wait for the first slice to be analyzed.',
         'ab-compare': 'A/B Compare',
         'priority-actions': 'Top Priorities',
-        'resonance-detected': 'Resonance at'
+        'resonance-detected': 'Resonance at',
+        'full-track': 'Full track',
+        'slice-average': 'Slice average',
+        'mastering-title': 'Mastering Assistant',
+        'mastering-sub': 'Top priority actions for your mix balance'
+    }
+};
+
+const bandI18n = {
+    de: {
+        Sub: 'Sub',
+        Bass: 'Bass',
+        'Low-Mids': 'Tiefmitten',
+        Mids: 'Mitten',
+        Presence: 'Präsenz',
+        Air: 'Air'
+    },
+    en: {
+        Sub: 'Sub',
+        Bass: 'Bass',
+        'Low-Mids': 'Low-Mids',
+        Mids: 'Mids',
+        Presence: 'Presence',
+        Air: 'Air'
     }
 };
 
 function t(key) {
     return (i18n[currentLang] && i18n[currentLang][key]) || key;
+}
+
+function bandLabel(name) {
+    return (bandI18n[currentLang] && bandI18n[currentLang][name]) || name;
 }
 
 function escapeHtml(value) {
@@ -261,6 +306,7 @@ function getCurrentInsights() {
 }
 
 function updateTexts() {
+    document.documentElement.lang = currentLang;
     document.querySelector('header p').textContent = t('subtitle');
     document.querySelector('label[for="genreSelect"]').textContent = t('genre-label');
     document.querySelector('#dropZone h2').textContent = t('drag-drop');
@@ -270,11 +316,18 @@ function updateTexts() {
     document.querySelector('#loadingState p').textContent = t('analyzing-sub');
     setButtonLabel(els.newAnalysisBtn, 'fa-solid fa-rotate-right', t('new-analysis'));
     document.getElementById('exportText').textContent = t('export');
+    document.getElementById('copyNotesText').textContent = t('copy-notes');
     document.getElementById('libText').textContent = t('library');
     document.getElementById('historyText').textContent = t('history');
     els.resultsPrefix.textContent = t('results-for');
     const compOpt = els.compareSelect.querySelector('option[value=""]');
     if (compOpt) compOpt.textContent = t('compare-placeholder');
+    const abLabel = document.querySelector('.ab-label');
+    if (abLabel) abLabel.textContent = t('ab-compare');
+    const assistantTitle = document.querySelector('#masteringAssistant .assistant-header h3');
+    if (assistantTitle) assistantTitle.innerHTML = `<i class="fa-solid fa-magic"></i> ${t('mastering-title')}`;
+    const assistantSub = document.querySelector('#masteringAssistant .assistant-header p');
+    if (assistantSub) assistantSub.textContent = t('mastering-sub');
 
     if (analysisData) {
         els.filenameDisplay.textContent = analysisData.filename;
@@ -745,11 +798,12 @@ function renderSummary(data) {
     }[summary.verdict] || 'summary-polish';
     const confidence = summary.confidence || { score: 0, label: 'low' };
     const confidenceLabel = t(`confidence-${confidence.label || 'low'}`);
+    const loudnessScope = t(summary.loudness_scope === 'full-track' ? 'full-track' : 'slice-average');
 
     els.summaryStrip.className = `summary-strip ${summary.verdict || 'polish'}`;
     els.summaryStrip.innerHTML = `
         <div class="summary-chip primary"><span>${t(verdictKey)}</span><strong>${escapeHtml(data.genre)}</strong></div>
-        <div class="summary-chip"><span>LUFS</span><strong>${fmt(summary.measured_lufs, '', 1)}</strong><small>${t('target')} ${fmt(summary.target_lufs, '', 0)}</small></div>
+        <div class="summary-chip"><span>LUFS</span><strong>${fmt(summary.measured_lufs, '', 1)}</strong><small>${t('target')} ${fmt(summary.target_lufs, '', 0)} / ${loudnessScope}</small></div>
         <div class="summary-chip"><span>${t('correlation')}</span><strong>${fmt(summary.correlation, '', 2)}</strong></div>
         <div class="summary-chip"><span>${t('low-end')}</span><strong>${fmt(summary.low_end_percent, '%', 1)}</strong></div>
         <div class="summary-chip"><span>${t('reliability')}</span><strong>${confidence.score}%</strong><small>${confidenceLabel}</small></div>
@@ -761,7 +815,7 @@ function renderSlice(slice) {
     const radarLabels = [];
     const radarData = [];
     slice.bands.forEach(band => {
-        radarLabels.push(band.name);
+        radarLabels.push(bandLabel(band.name));
         radarData.push(Number(band.percent) || 0);
     });
 
@@ -802,7 +856,7 @@ function renderSlice(slice) {
     const bandRows = slice.bands.map(band => `
         <div class="band-row">
             <div>
-                <strong>${escapeHtml(band.name)}</strong>
+                <strong>${escapeHtml(bandLabel(band.name))}</strong>
                 <small>${escapeHtml(band.range)}</small>
             </div>
             <div class="band-meter">
@@ -818,11 +872,15 @@ function renderSlice(slice) {
     const [lufsLow, lufsHigh] = currentLufsRange();
     const targetMatch = lufs !== null && lufs >= lufsLow && lufs <= lufsHigh;
     const quality = slice.quality || {};
+    const levelDetails = slice.levels || {};
+    const leftLevels = levelDetails.left || {};
+    const rightLevels = levelDetails.right || {};
+    const monoLevels = levelDetails.mono || {};
     
     const resonanceHtml = (slice.resonances || []).map(r => `
         <div class="resonance-pill">
             <i class="fa-solid fa-wave-square"></i>
-            ${r.band ? `<strong>${r.band}</strong> ` : ''}${t('resonance-detected')} ${r.freq} Hz (+${r.gain} dB)
+            ${r.band ? `<strong>${escapeHtml(bandLabel(r.band))}</strong> ` : ''}${t('resonance-detected')} ${r.freq} Hz (+${r.gain} dB)
         </div>
     `).join('');
 
@@ -837,6 +895,9 @@ function renderSlice(slice) {
                 <h3><i class="fa-solid fa-bolt"></i> ${t('dyn')}</h3>
                 <div class="metric-row"><span class="metric-label">${t('rms')}</span><span class="metric-value">${fmt(slice.rms_db, ' dBFS')}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('peak')}</span><span class="metric-value">${fmt(slice.peak_db, ' dBFS')}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('left-peak')}</span><span class="metric-value">${fmt(leftLevels.peak_db, ' dBFS')}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('right-peak')}</span><span class="metric-value">${fmt(rightLevels.peak_db, ' dBFS')}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('mono-peak')}</span><span class="metric-value">${fmt(monoLevels.peak_db, ' dBFS')}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('crest')}</span><span class="metric-value">${fmt(slice.crest_db, ' dB')}</span></div>
                 <div class="metric-row"><span class="metric-label">True Peak</span><span class="metric-value">${fmt(slice.TP, ' dBTP')}</span></div>
             </div>
@@ -846,6 +907,7 @@ function renderSlice(slice) {
                 <div class="metric-row"><span class="metric-label">${t('correlation')}</span><span class="metric-value" style="color: ${metricTone(slice.correlation, 'correlation')}">${fmt(slice.correlation, '')}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('width')}</span><span class="metric-value">${fmt(slice.mid_side ? slice.mid_side.width_pct : 0, '%', 1)}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('ms-ratio')}</span><span class="metric-value">${fmt(slice.mid_side ? slice.mid_side.ms_ratio_db : 0, ' dB', 1)}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('stereo-balance')}</span><span class="metric-value">${fmt(quality.stereo_balance_db, ' dB', 2)}</span></div>
                 <div class="correlation-meter">
                     <span style="left: ${marker}%"></span>
                 </div>
@@ -864,6 +926,7 @@ function renderSlice(slice) {
                 <h3><i class="fa-solid fa-shield-halved"></i> ${t('quality-title')}</h3>
                 <div class="metric-row"><span class="metric-label">${t('clipping')}</span><span class="metric-value">${fmt(quality.clipped_percent, '%', 3)}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('silence')}</span><span class="metric-value">${fmt(quality.silence_percent, '%', 1)}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('dc-offset')}</span><span class="metric-value">${fmt(quality.dc_offset, '', 5)}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('centroid')}</span><span class="metric-value">${fmt(quality.spectral_centroid_hz, ' Hz', 0)}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('rolloff')}</span><span class="metric-value">${fmt(quality.spectral_rolloff_hz, ' Hz', 0)}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('loudness-method')}</span><span class="metric-value compact">${escapeHtml(slice.loudness_method || 'N/A')}</span></div>
@@ -970,13 +1033,18 @@ if (bgCanvas) {
 
 function copyDAWNotes() {
     if (!analysisData || !analysisData.slices || analysisData.slices.length === 0) {
-        setStatus("Please wait for the first slice to be analyzed.", "info");
+        setStatus(t('copy-wait'), "info");
         return;
     }
     
     const summary = analysisData.summary;
     const activeSlice = getActiveSlice() || analysisData.slices[0];
     if (!activeSlice) return;
+    const levelDetails = activeSlice.levels || {};
+    const leftLevels = levelDetails.left || {};
+    const rightLevels = levelDetails.right || {};
+    const monoLevels = levelDetails.mono || {};
+    const quality = activeSlice.quality || {};
     
     let text = `MIX ANALYSIS REPORT: ${analysisData.filename}\n`;
     text += `Genre Profile: ${analysisData.genre}\n`;
@@ -989,9 +1057,17 @@ function copyDAWNotes() {
     }
     
     text += `KEY METRICS (${activeSlice.tag}):\n`;
-    text += `- Loudness: ${fmt(activeSlice.I, ' LUFS', 1)}\n`;
+    if (summary && summary.measured_lufs !== null && summary.measured_lufs !== undefined) {
+        const scope = summary.loudness_scope === 'full-track' ? 'Full Track Loudness' : 'Slice Average Loudness';
+        text += `- ${scope}: ${fmt(summary.measured_lufs, ' LUFS', 1)}\n`;
+    } else {
+        text += `- Loudness: ${fmt(activeSlice.I, ' LUFS', 1)}\n`;
+    }
     text += `- Dynamics (Crest): ${fmt(activeSlice.crest_db, ' dB', 1)}\n`;
+    text += `- Channel Peak L/R: ${fmt(leftLevels.peak_db, ' dBFS', 1)} / ${fmt(rightLevels.peak_db, ' dBFS', 1)}\n`;
+    text += `- Mono Sum Peak: ${fmt(monoLevels.peak_db, ' dBFS', 1)}\n`;
     text += `- Correlation: ${fmt(activeSlice.correlation, '', 2)}\n`;
+    text += `- L/R Balance: ${fmt(quality.stereo_balance_db, ' dB', 2)}\n`;
     text += `- Stereo Width: ${fmt(activeSlice.mid_side ? activeSlice.mid_side.width_pct : 0, '%', 1)}\n\n`;
     
     if (activeSlice.resonances && activeSlice.resonances.length > 0) {
@@ -1006,7 +1082,7 @@ function copyDAWNotes() {
         const btn = document.querySelector('.btn-secondary[onclick="copyDAWNotes()"]');
         if (btn) {
             const originalHtml = btn.innerHTML;
-            btn.innerHTML = `<i class="fa-solid fa-check"></i> <span>Copied!</span>`;
+            btn.innerHTML = `<i class="fa-solid fa-check"></i> <span>${t('copied')}</span>`;
             setTimeout(() => btn.innerHTML = originalHtml, 2000);
         }
     }).catch(err => {

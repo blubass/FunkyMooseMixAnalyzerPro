@@ -563,6 +563,8 @@ document.getElementById('exportPdfBtn').addEventListener('click', () => {
     els.printHeader.classList.remove('hidden');
     els.actionButtons.style.display = 'none';
 
+    const pdfFilename = `Mix_Analysis_Report_${analysisData.filename}.pdf`;
+
     const restoreExportUi = () => {
         els.printHeader.classList.add('hidden');
         els.actionButtons.style.display = 'flex';
@@ -570,11 +572,47 @@ document.getElementById('exportPdfBtn').addEventListener('click', () => {
 
     html2pdf().set({
         margin: [15, 15, 15, 15],
-        filename: `Mix_Analysis_Report_${analysisData.filename}.pdf`,
+        filename: pdfFilename,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#101215' },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    }).from(els.resultsSection).save().then(restoreExportUi).catch(error => {
+    }).from(els.resultsSection).outputPdf('datauristring').then(dataUri => {
+        restoreExportUi();
+        // Strip the data URI prefix to get raw base64
+        const base64 = dataUri.replace(/^data:application\/pdf;base64,/, '');
+
+        // --- Native pywebview path (macOS app) ---
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.save_pdf) {
+            window.pywebview.api.save_pdf(base64, pdfFilename).then(result => {
+                if (result && result.success) {
+                    setStatus(`✓ PDF gespeichert: ${result.path}`, 'success');
+                } else if (result && result.cancelled) {
+                    // user cancelled – do nothing
+                } else {
+                    setStatus(`PDF-Fehler: ${(result && result.error) || 'Unbekannter Fehler'}`, 'error');
+                }
+            }).catch(err => setStatus(`PDF-Fehler: ${err}`, 'error'));
+            return;
+        }
+
+        // --- Browser fallback: send base64 to Flask and get a real download ---
+        fetch('/export_pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: base64, filename: pdfFilename })
+        }).then(response => {
+            if (!response.ok) throw new Error(`Server error ${response.status}`);
+            return response.blob();
+        }).then(blob => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = pdfFilename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
+        }).catch(err => setStatus(`PDF Export fehlgeschlagen: ${err.message}`, 'error'));
+    }).catch(error => {
         setStatus(error.message, 'error');
         restoreExportUi();
     });

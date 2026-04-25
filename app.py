@@ -1,9 +1,9 @@
-import os, subprocess, re, wave, contextlib, uuid, glob, time, sqlite3, json, shutil, sys
+import os, subprocess, re, wave, contextlib, uuid, glob, time, sqlite3, json, shutil, sys, base64
 
 # Ensure common paths are in PATH so ffmpeg can be found from a .app bundle
 os.environ['PATH'] = f"/opt/homebrew/bin:/usr/local/bin:{os.environ.get('PATH', '')}"
 
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, make_response
 from werkzeug.utils import secure_filename
 import numpy as np
 
@@ -1122,17 +1122,71 @@ def toggle_reference(req_id):
             return jsonify({"success": True, "is_reference": new_val})
         return json_error("Analysis not found.", 404)
 
+@app.route('/export_pdf', methods=['POST'])
+def export_pdf():
+    """Browser-mode fallback: receives base64-encoded PDF and sends it as a download."""
+    try:
+        payload = request.get_json(force=True)
+        b64 = payload.get('data', '')
+        filename = secure_filename(payload.get('filename', 'Mix_Analysis_Report.pdf'))
+        if not filename.lower().endswith('.pdf'):
+            filename += '.pdf'
+        pdf_bytes = base64.b64decode(b64)
+        response = make_response(pdf_bytes)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+    except Exception as exc:
+        return json_error(f'PDF export failed: {exc}', 400)
+
+
 if __name__ == "__main__":
     import threading
     import webview
-    
+
+    class PyWebViewApi:
+        """Exposes Python methods to the JS layer via window.pywebview.api."""
+
+        def save_pdf(self, base64_data, filename):
+            """Open a native macOS Save dialog and write the PDF."""
+            import base64 as _b64
+            try:
+                win = webview.windows[0]
+                save_path = win.create_file_dialog(
+                    webview.SAVE_DIALOG,
+                    directory=os.path.expanduser('~/Desktop'),
+                    save_filename=filename,
+                    file_types=('PDF Files (*.pdf)',),
+                )
+                if save_path:
+                    # pywebview returns a tuple on some platforms
+                    path = save_path[0] if isinstance(save_path, (list, tuple)) else save_path
+                    if not path.lower().endswith('.pdf'):
+                        path += '.pdf'
+                    pdf_bytes = _b64.b64decode(base64_data)
+                    with open(path, 'wb') as fh:
+                        fh.write(pdf_bytes)
+                    return {'success': True, 'path': path}
+                return {'success': False, 'cancelled': True}
+            except Exception as exc:
+                return {'success': False, 'error': str(exc)}
+
+    api = PyWebViewApi()
+
     def start_server():
         app.run(host="127.0.0.1", port=5050, debug=False)
-        
+
     t = threading.Thread(target=start_server)
     t.daemon = True
     t.start()
-    
-    # Create the native app window without browser-like features
-    webview.create_window('Mix Analyzer', 'http://127.0.0.1:5050/', width=1280, height=800, text_select=False)
+
+    # Create the native app window and expose the Python API bridge
+    webview.create_window(
+        'Mix Analyzer',
+        'http://127.0.0.1:5050/',
+        width=1280,
+        height=800,
+        text_select=False,
+        js_api=api,
+    )
     webview.start(gui='cocoa', debug=False)

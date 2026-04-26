@@ -25,3 +25,4 @@ static/images/*_spectrum.png
 .coverage
 .idea/
 .vscode/
+tests/test_files/

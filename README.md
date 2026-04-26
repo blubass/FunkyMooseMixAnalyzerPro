@@ -55,6 +55,43 @@ Stelle sicher, dass **FFmpeg** installiert ist:
 
 ---
 
+## 🧪 Test Run
+
+Um die mathematische Genauigkeit der Engine zu prüfen, kannst du automatisierte Tests gegen das laufende Backend fahren.
+
+1. Starte die App (`python app.py`).
+2. Lege eigene Test-Dateien in `tests/test_files/` ab:
+   * `loud_master.wav`
+   * `dynamic_track.wav`
+   * `problematic_bass.wav`
+3. Starte den Runner:
+   ```bash
+   bash tests/run_tests.sh
+   ```
+
+*Hinweis: Testdateien sind nicht im Repository enthalten, um die Größe gering zu halten.*
+
+---
+
+## 🏗️ macOS App bauen
+
+Du kannst das native macOS Bundle (`.app`) und den Installer (`.dmg`) selbst generieren:
+
+1. **Abhängigkeiten**:
+   ```bash
+   pip install pyinstaller
+   ```
+2. **App bauen**:
+   ```bash
+   bash scripts/build_macos_app.sh
+   ```
+3. **DMG erstellen**:
+   ```bash
+   bash scripts/make_dmg.sh
+   ```
+
+---
+
 ## 🛠 Technik hinter dem Geweih
 
 *   **Backend**: Python & Flask

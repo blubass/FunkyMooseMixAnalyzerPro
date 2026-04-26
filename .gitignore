@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *.log
 *.spec
+!Mix Analyzer.spec
 
 .venv/
 venv/

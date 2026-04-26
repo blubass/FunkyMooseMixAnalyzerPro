@@ -106,8 +106,8 @@ const i18n = {
         'resonance-detected': 'Resonanz bei',
         'full-track': 'Gesamttrack',
         'slice-average': 'Schnitt-Mittel',
-        'mastering-title': 'Mastering Assistant',
-        'mastering-sub': 'Top-Prioritäten für Balance und Master',
+        'mastering-title': 'Funky Moose Advice Engine',
+        'mastering-sub': 'Smart Mix-Insights & Korrektur-Vorschläge',
         'vocal': 'Vocal',
         'instrumental': 'Instrumental',
         'toggle-hint': 'Enthält Vocals?',
@@ -206,8 +206,8 @@ const i18n = {
         'resonance-detected': 'Resonance at',
         'full-track': 'Full track',
         'slice-average': 'Slice average',
-        'mastering-title': 'Mastering Assistant',
-        'mastering-sub': 'Top priority actions for your mix balance',
+        'mastering-title': 'Funky Moose Advice Engine',
+        'mastering-sub': 'Smart Mix Insights & Tactical Advice',
         'vocal': 'Vocal',
         'instrumental': 'Instrumental',
         'toggle-hint': 'Contains vocals?',
@@ -375,6 +375,13 @@ function updateTexts() {
     document.getElementById('libText').textContent = t('library');
     document.getElementById('historyText').textContent = t('history');
     els.resultsPrefix.textContent = t('results-for');
+    
+    // New Branding IDs
+    const masteringTitle = document.getElementById('masteringTitleEl');
+    if (masteringTitle) masteringTitle.textContent = t('mastering-title');
+    const masteringSub = document.getElementById('masteringSubEl');
+    if (masteringSub) masteringSub.textContent = t('mastering-sub');
+
     const compOpt = els.compareSelect.querySelector('option[value=""]');
     if (compOpt) compOpt.textContent = t('compare-placeholder');
     const abLabel = document.querySelector('.ab-label');

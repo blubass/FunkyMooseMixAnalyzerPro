@@ -2,21 +2,26 @@
 __pycache__/
 *.py[cod]
 *.log
+*.spec
 
 .venv/
 venv/
+ENV/
 
 build/
 dist/
 bin/
 *.egg-info/
 
+# Data & Audio
 history.db
 uploads/
-static/audio/upload_*
-static/audio/_snippet_*
+static/audio/*
+!static/audio/.gitkeep
 static/images/*_waveform.png
 static/images/*_spectrum.png
 
 .pytest_cache/
 .coverage
+.idea/
+.vscode/

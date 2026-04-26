@@ -149,7 +149,14 @@ def get_bin_path(cmd):
             if os.path.exists(bundle_bin):
                 return bundle_bin
             
-    # 2. Check standard system paths
+    # 2. Check in local bin folder (relative to script)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    for name in names:
+        local_bin = os.path.join(script_dir, "bin", name)
+        if os.path.exists(local_bin):
+            return local_bin
+
+    # 3. Check standard system paths
     for name in names:
         for p in [f"/opt/homebrew/bin/{name}", f"/usr/local/bin/{name}", f"/usr/bin/{name}"]:
             if os.path.exists(p):

@@ -161,6 +161,19 @@
         </div>
     </div>
 
+    <div id="dependencyModal" class="modal hidden">
+        <div class="modal-content glass-card">
+            <i class="fa-solid fa-triangle-exclamation warning-icon"></i>
+            <h2 id="depTitle">FFmpeg Missing</h2>
+            <p id="depDesc">FFmpeg is required for audio analysis but was not found on your system.</p>
+            <div class="dep-instructions">
+                <p><strong>macOS:</strong> <code>brew install ffmpeg</code></p>
+                <p><strong>Windows:</strong> Download from <a href="https://ffmpeg.org/download.html" target="_blank">ffmpeg.org</a></p>
+            </div>
+            <button onclick="location.reload()" class="btn-primary"><i class="fa-solid fa-rotate"></i> Check Again</button>
+        </div>
+    </div>
+
     <script src="/static/js/app.js"></script>
 </body>
 </html>

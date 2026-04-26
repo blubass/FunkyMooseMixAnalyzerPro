@@ -121,7 +121,17 @@ const i18n = {
         'transients-title': 'Transient Analyse',
         'transient-density': 'Einsätze / Sek.',
         'attack-time': 'Attack-Zeit',
-        'perc-energy': 'Percussion-Energie'
+        'perc-energy': 'Percussion-Energie',
+        'spectrum-title': 'Spektrum Analyse (interaktiv)',
+        'spectrum-mid': 'Mix (Mid)',
+        'spectrum-side': 'Side-Kanal',
+        'spectrum-target': 'Genre-Zielkurve',
+        'spectrum-hint': 'Hover für Frequenz-Details',
+        'spectrum-diff': 'Differenz (Mix - Ref)',
+        'step-full': 'Gesamttrack Scan',
+        'dep-title': 'FFmpeg fehlt',
+        'dep-desc': 'FFmpeg wird für die Audio-Analyse benötigt, wurde aber nicht auf deinem System gefunden.',
+        'dep-check': 'Erneut prüfen'
     },
     en: {
         subtitle: 'Audio Intelligence Dashboard - by Uwe Arthur Felchle',
@@ -211,7 +221,17 @@ const i18n = {
         'transients-title': 'Transient Analysis',
         'transient-density': 'Onsets / sec',
         'attack-time': 'Attack Time',
-        'perc-energy': 'Percussion Energy'
+        'perc-energy': 'Percussion Energy',
+        'spectrum-title': 'Spectrum Analysis (interactive)',
+        'spectrum-mid': 'Mix (Mid)',
+        'spectrum-side': 'Side Channel',
+        'spectrum-target': 'Genre Target Curve',
+        'spectrum-hint': 'Hover for frequency details',
+        'spectrum-diff': 'Difference (Mix - Ref)',
+        'step-full': 'Full-track Scan',
+        'dep-title': 'FFmpeg Missing',
+        'dep-desc': 'FFmpeg is required for audio analysis but was not found on your system.',
+        'dep-check': 'Check Again'
     }
 };
 
@@ -603,23 +623,27 @@ document.getElementById('exportPdfBtn').addEventListener('click', () => {
     els.printHeader.classList.remove('hidden');
     els.actionButtons.style.display = 'none';
 
-    const pdfFilename = `Mix_Analysis_Report_${analysisData.filename}.pdf`;
+    const cleanFilename = (analysisData.filename || 'Report').replace(/\.[^/.]+$/, "");
+    const pdfFilename = `Mix_Report_${cleanFilename}.pdf`;
 
     const restoreExportUi = () => {
         els.printHeader.classList.add('hidden');
         els.actionButtons.style.display = 'flex';
     };
 
+    setStatus('PDF wird generiert...', 'success');
+
     html2pdf().set({
-        margin: [15, 15, 15, 15],
+        margin: [10, 10, 10, 10],
         filename: pdfFilename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#101215' },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        image: { type: 'jpeg', quality: 0.90 },
+        html2canvas: { scale: 1.0, useCORS: true, logging: false, backgroundColor: '#101215' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }
     }).from(els.resultsSection).outputPdf('datauristring').then(dataUri => {
+        setStatus('PDF wird gespeichert...', 'success');
         restoreExportUi();
-        // Strip the data URI prefix to get raw base64
-        const base64 = dataUri.replace(/^data:application\/pdf;base64,/, '');
+        // Robust base64 extraction
+        const base64 = dataUri.includes('base64,') ? dataUri.split('base64,')[1] : dataUri;
 
         // --- Native pywebview path (macOS app) ---
         if (window.pywebview && window.pywebview.api && window.pywebview.api.save_pdf) {
@@ -706,14 +730,23 @@ async function uploadFile(file) {
         const totalSlices = startData.slices_meta.length;
         let completedSlices = 0;
 
-        // Populate steps
+        // Populate steps: Full track first, then slices
         els.analysisSteps.replaceChildren();
+        
+        const fullStepSpan = document.createElement('span');
+        fullStepSpan.textContent = t('step-full');
+        fullStepSpan.id = 'step-full-scan';
+        els.analysisSteps.appendChild(fullStepSpan);
+
         startData.slices_meta.forEach(meta => {
             const span = document.createElement('span');
             span.textContent = meta.tag;
             span.id = `step-${meta.tag}`;
             els.analysisSteps.appendChild(span);
         });
+
+        const totalSteps = totalSlices + 1; // +1 for full scan
+        let completedSteps = 0;
 
         // Prepare the result shell while keeping the analysis progress visible.
         renderResults({
@@ -724,8 +757,26 @@ async function uploadFile(file) {
             summary: null
         }, { showResults: false, keepLoading: true, refreshHistory: false });
 
+        // 1. Full Track Analysis Step
+        updateLoadingProgress(t('step-full'), completedSteps, totalSteps, 'full-scan');
+        const fullTrackData = await fetchJson(`/analyze_full_track/${reqId}?lang=${currentLang}`, {
+            method: 'POST'
+        });
+        
+        const fullStepEl = document.getElementById('step-full-scan');
+        if (fullStepEl) {
+            fullStepEl.classList.remove('active');
+            fullStepEl.classList.add('done');
+        }
+        
+        analysisData = fullTrackData.current_analysis;
+        updateIncrementalResults(analysisData);
+        completedSteps++;
+        els.progressBar.style.width = `${(completedSteps / totalSteps) * 100}%`;
+
+        // 2. Slices Analysis Step
         for (const meta of startData.slices_meta) {
-            updateLoadingProgress(meta.tag, completedSlices, totalSlices);
+            updateLoadingProgress(meta.tag, completedSteps, totalSteps, meta.tag);
             const sliceData = await fetchJson(`/analyze_slice/${reqId}/${meta.tag}?lang=${currentLang}`, {
                 method: 'POST'
             });
@@ -738,10 +789,10 @@ async function uploadFile(file) {
 
             analysisData = sliceData.current_analysis;
             updateIncrementalResults(analysisData);
-            completedSlices++;
+            completedSteps++;
             
             // Update progress bar
-            const pct = (completedSlices / totalSlices) * 100;
+            const pct = (completedSteps / totalSteps) * 100;
             els.progressBar.style.width = `${pct}%`;
         }
 
@@ -756,11 +807,14 @@ async function uploadFile(file) {
     }
 }
 
-function updateLoadingProgress(tag, current, total) {
-    const stepEl = document.getElementById(`step-${tag}`);
-    if (stepEl) stepEl.classList.add('active');
+function updateLoadingProgress(label, current, total, stepIdSuffix) {
+    const stepId = stepIdSuffix ? `step-${stepIdSuffix}` : null;
+    if (stepId) {
+        const stepEl = document.getElementById(stepId);
+        if (stepEl) stepEl.classList.add('active');
+    }
     
-    els.loadingTitle.textContent = `${t('analyzing')} (${tag})`;
+    els.loadingTitle.textContent = `${t('analyzing')} (${label})`;
 }
 
 function updateIncrementalResults(data) {
@@ -835,6 +889,7 @@ function setupABComparison() {
     
     if (!referenceData) {
         abContainer.classList.add('hidden');
+        window.currentAB = 'A';
         return;
     }
     
@@ -843,7 +898,14 @@ function setupABComparison() {
     const originalSrc = analysisData.audio_url;
     const refSrc = referenceData.audio_url;
     
+    const updateChartsHighlight = (active) => {
+        window.currentAB = active;
+        const activeSlice = getActiveSlice();
+        if (activeSlice) renderSpectrumChart(activeSlice, referenceData);
+    };
+
     btnA.onclick = () => {
+        if (window.currentAB === 'A') return;
         btnA.classList.add('active');
         btnB.classList.remove('active');
         const currentTime = els.audioPlayer.currentTime;
@@ -851,9 +913,11 @@ function setupABComparison() {
         els.audioPlayer.src = originalSrc;
         els.audioPlayer.currentTime = currentTime;
         if (wasPlaying) els.audioPlayer.play();
+        updateChartsHighlight('A');
     };
     
     btnB.onclick = () => {
+        if (window.currentAB === 'B') return;
         btnB.classList.add('active');
         btnA.classList.remove('active');
         const currentTime = els.audioPlayer.currentTime;
@@ -861,6 +925,7 @@ function setupABComparison() {
         els.audioPlayer.src = refSrc;
         els.audioPlayer.currentTime = currentTime;
         if (wasPlaying) els.audioPlayer.play();
+        updateChartsHighlight('B');
     };
 }
 
@@ -1059,8 +1124,14 @@ function renderSlice(slice) {
                     <div class="visual-container">
                         <img src="${escapeHtml(slice.waveform_url)}?t=${Date.now()}" alt="Waveform">
                     </div>
-                    <div class="visual-container">
-                        <img src="${escapeHtml(slice.spectrum_url)}?t=${Date.now()}" alt="Spectrum">
+                    <div class="visual-container spectrum-chart-container">
+                        <div class="spectrum-chart-header">
+                            <span class="spectrum-chart-title">
+                                <i class="fa-solid fa-chart-line"></i> ${t('spectrum-title')}
+                            </span>
+                            <span class="spectrum-hint">${t('spectrum-hint')}</span>
+                        </div>
+                        <canvas id="spectrumChart" style="width:100%;height:180px;"></canvas>
                         <div class="resonance-list">${resonanceHtml}</div>
                     </div>
                 </div>
@@ -1120,6 +1191,9 @@ function renderSlice(slice) {
         }
     });
     animateScoreRings();
+
+    // Render interactive spectrum chart after DOM is ready
+    renderSpectrumChart(slice, referenceData);
 }
 
 function computeHeadphoneScores(slice) {
@@ -1178,6 +1252,238 @@ function animateScoreRings() {
 }
 
 const bgCanvas = document.getElementById('bgCanvas');
+
+// ─────────────────────────────────────────────────────────────
+// Interactive Spectrum Chart (Chart.js)
+// ─────────────────────────────────────────────────────────────
+async function renderSpectrumChart(slice, refData) {
+    const canvas = document.getElementById('spectrumChart');
+    if (!canvas) return;
+
+    if (window.spectrumChartInstance) {
+        window.spectrumChartInstance.destroy();
+        window.spectrumChartInstance = null;
+    }
+
+    // Show loading skeleton
+    canvas.style.opacity = '0.4';
+
+    const fft = slice.fft_data;
+    if (!fft || !fft.freqs || !fft.mid) {
+        canvas.style.opacity = '1';
+        return;
+    }
+
+    const labels = fft.freqs.map(f => {
+        if (f >= 1000) return `${(f / 1000).toFixed(1)}k`;
+        return `${Math.round(f)}`;
+    });
+
+    const datasets = [];
+
+    const isA = (window.currentAB || 'A') === 'A';
+
+    // Mid channel
+    datasets.push({
+        label: t('spectrum-mid'),
+        data: fft.mid,
+        borderColor: isA ? '#19d3c5' : 'rgba(25, 211, 197, 0.4)',
+        backgroundColor: isA ? 'rgba(25, 211, 197, 0.08)' : 'transparent',
+        borderWidth: isA ? 2 : 1,
+        pointRadius: 0,
+        tension: 0.25,
+        fill: isA,
+        order: 2
+    });
+
+    // Side channel
+    if (fft.side) {
+        datasets.push({
+            label: t('spectrum-side'),
+            data: fft.side,
+            borderColor: '#f472b6',
+            backgroundColor: 'rgba(244, 114, 182, 0.05)',
+            borderWidth: 1,
+            borderDash: [4, 3],
+            pointRadius: 0,
+            tension: 0.25,
+            fill: false,
+            order: 4,
+            hidden: !isA
+        });
+    }
+
+    // Reference track overlay
+    if (refData) {
+        const refSlice = refData.slices.find(s => s.tag === slice.tag) || refData.slices[0];
+        if (refSlice && refSlice.fft_data && refSlice.fft_data.mid) {
+            const isB = !isA;
+            datasets.push({
+                label: `${t('reference')} (Mid)`,
+                data: refSlice.fft_data.mid,
+                borderColor: isB ? '#f59e0b' : 'rgba(245, 158, 11, 0.4)',
+                backgroundColor: isB ? 'rgba(245, 158, 11, 0.08)' : 'transparent',
+                borderWidth: isB ? 2 : 1,
+                borderDash: isB ? [] : [6, 3],
+                pointRadius: 0,
+                tension: 0.25,
+                fill: isB,
+                order: 1
+            });
+
+            // Diff curve: Mix - Reference
+            const diffData = fft.mid.map((val, i) => val - refSlice.fft_data.mid[i]);
+            datasets.push({
+                label: t('spectrum-diff'),
+                data: diffData,
+                borderColor: 'rgba(139, 92, 246, 0.6)',
+                backgroundColor: 'transparent',
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.25,
+                fill: false,
+                order: 3,
+                yAxisID: 'yDiff',
+                hidden: true // Hidden by default, user can toggle via legend
+            });
+        }
+    }
+
+    // Genre target curve (interpolated to match our 512-point grid)
+    if (fft.target_curve && fft.target_curve.length >= 2) {
+        const tcFreqs = fft.target_curve.map(p => p.f);
+        const tcVals  = fft.target_curve.map(p => p.v);
+        // Simple linear interpolation for each of our label frequencies
+        const targetData = fft.freqs.map(f => {
+            if (f <= tcFreqs[0]) return tcVals[0];
+            if (f >= tcFreqs[tcFreqs.length - 1]) return tcVals[tcFreqs.length - 1];
+            let i = 0;
+            while (i < tcFreqs.length - 1 && tcFreqs[i + 1] < f) i++;
+            const t0 = tcFreqs[i], t1 = tcFreqs[i + 1];
+            const ratio = (f - t0) / (t1 - t0);
+            return tcVals[i] + ratio * (tcVals[i + 1] - tcVals[i]);
+        });
+        datasets.push({
+            label: t('spectrum-target'),
+            data: targetData,
+            borderColor: 'rgba(255,255,255,0.22)',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [3, 4],
+            pointRadius: 0,
+            tension: 0.3,
+            fill: false,
+            order: 4
+        });
+    }
+
+    const ctx = canvas.getContext('2d');
+    window.spectrumChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 400, easing: 'easeOutQuart' },
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: 'rgba(255,255,255,0.45)',
+                        font: { family: 'Inter', size: 9 },
+                        maxTicksLimit: 12,
+                        maxRotation: 0
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                y: {
+                    position: 'left',
+                    ticks: {
+                        color: 'rgba(255,255,255,0.45)',
+                        font: { family: 'Inter', size: 9 },
+                        callback: v => `${v} dB`
+                    },
+                    grid: { color: 'rgba(255,255,255,0.06)' },
+                    title: {
+                        display: true,
+                        text: 'dB',
+                        color: 'rgba(255,255,255,0.3)',
+                        font: { size: 9, family: 'Inter' }
+                    }
+                },
+                yDiff: {
+                    position: 'right',
+                    display: false, // Only show if Diff dataset is active
+                    min: -20,
+                    max: 20,
+                    ticks: {
+                        color: 'rgba(139, 92, 246, 0.6)',
+                        font: { family: 'Inter', size: 8 },
+                        callback: v => `${v > 0 ? '+' : ''}${v} dB`
+                    },
+                    grid: { drawOnChartArea: false },
+                    title: {
+                        display: true,
+                        text: 'Diff',
+                        color: 'rgba(139, 92, 246, 0.5)',
+                        font: { size: 9, family: 'Inter' }
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    align: 'end',
+                    labels: {
+                        color: 'rgba(255,255,255,0.7)',
+                        font: { family: 'Inter', size: 10 },
+                        boxWidth: 12,
+                        padding: 8
+                    },
+                    onClick: function(e, legendItem, legend) {
+                        const index = legendItem.datasetIndex;
+                        const ci = legend.chart;
+                        const meta = ci.getDatasetMeta(index);
+                        
+                        meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+                        
+                        // Toggle secondary Y-axis for Diff
+                        if (ci.data.datasets[index].label === t('spectrum-diff')) {
+                            ci.options.scales.yDiff.display = !meta.hidden;
+                        }
+                        
+                        ci.update();
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(16,18,21,0.95)',
+                    borderColor: 'rgba(25,211,197,0.3)',
+                    borderWidth: 1,
+                    titleColor: '#19d3c5',
+                    bodyColor: 'rgba(255,255,255,0.8)',
+                    titleFont: { family: 'Inter', size: 11 },
+                    bodyFont: { family: 'Inter', size: 10 },
+                    callbacks: {
+                        title(items) {
+                            const idx = items[0].dataIndex;
+                            const hz = fft.freqs[idx];
+                            return hz >= 1000 ? `${(hz/1000).toFixed(2)} kHz` : `${Math.round(hz)} Hz`;
+                        },
+                        label(item) {
+                            return ` ${item.dataset.label}: ${item.parsed.y.toFixed(1)} dB`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    canvas.style.opacity = '1';
+}
 if (bgCanvas) {
     const bgCtx = bgCanvas.getContext('2d');
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1279,3 +1585,24 @@ function copyDAWNotes() {
         console.error('Could not copy text: ', err);
     });
 }
+
+// ─────────────────────────────────────────────────────────────
+// System Check (Public Readiness)
+// ─────────────────────────────────────────────────────────────
+async function checkSystem() {
+    try {
+        const status = await fetchJson('/init_check');
+        if (status.success && !status.ffmpeg) {
+            document.getElementById('dependencyModal').classList.remove('hidden');
+            document.getElementById('depTitle').textContent = t('dep-title');
+            document.getElementById('depDesc').textContent = t('dep-desc');
+            const checkBtn = document.querySelector('#dependencyModal button');
+            if (checkBtn) checkBtn.innerHTML = `<i class="fa-solid fa-rotate"></i> ${t('dep-check')}`;
+        }
+    } catch (err) {
+        console.error('System check failed:', err);
+    }
+}
+
+// Initial System Check
+checkSystem();

@@ -1310,3 +1310,104 @@ header p {
     border: 1px solid rgba(245, 158, 11, 0.3);
     color: var(--accent-color);
 }
+
+/* ── Interactive Spectrum Chart ── */
+.spectrum-chart-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px 10px;
+    min-height: 180px;
+}
+
+.spectrum-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.spectrum-chart-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.spectrum-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-style: italic;
+    opacity: 0.7;
+}
+
+#spectrumChart {
+    display: block;
+    width: 100% !important;
+    max-height: 180px;
+    transition: opacity 0.3s ease;
+}
+
+/* ── Modal & Dependency Check ── */
+.modal {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(8px);
+    z-index: 10000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    max-width: 500px;
+    width: 90%;
+    padding: 40px;
+    text-align: center;
+    background: var(--card-bg);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 12px;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+}
+
+.warning-icon {
+    font-size: 3.5rem;
+    color: var(--danger);
+    margin-bottom: 20px;
+}
+
+.modal-content h2 {
+    margin-bottom: 12px;
+}
+
+.modal-content p {
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-bottom: 24px;
+}
+
+.dep-instructions {
+    background: rgba(255,255,255,0.05);
+    padding: 16px;
+    border-radius: var(--radius);
+    text-align: left;
+    margin-bottom: 30px;
+}
+
+.dep-instructions code {
+    background: rgba(255,255,255,0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--primary-color);
+}
+
+.dep-instructions a {
+    color: var(--primary-color);
+    text-decoration: none;
+}

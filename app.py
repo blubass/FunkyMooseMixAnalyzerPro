@@ -107,6 +107,16 @@ app.config['IMAGE_FOLDER'] = image_dir
 app.config['SNIPPET_FOLDER'] = snippet_dir
 app.config['MAX_CONTENT_LENGTH'] = MAX_UPLOAD_MB * 1024 * 1024
 
+# Generate a persistent secret key for sessions (Public Readiness)
+SECRET_PATH = os.path.join(data_dir, ".secret_key")
+if os.path.exists(SECRET_PATH):
+    with open(SECRET_PATH, "rb") as f:
+        app.secret_key = f.read()
+else:
+    app.secret_key = os.urandom(24)
+    with open(SECRET_PATH, "wb") as f:
+        f.write(app.secret_key)
+
 DB_PATH = os.path.join(data_dir, 'history.db')
 
 for directory in (data_dir, audio_dir, image_dir, snippet_dir):
@@ -459,6 +469,7 @@ def band_distribution(samples, sr, genre="Pop"):
             empty_features,
             [],
             [],
+            [],
         )
         
     mono = np.nan_to_num(mono)
@@ -525,9 +536,27 @@ def band_distribution(samples, sr, genre="Pop"):
     avg_level = np.mean(mag_db[analysis_mask]) if np.any(analysis_mask) else -40
     target_curve = []
     for f, v in curve_pts:
-        target_curve.append({"f": f, "v": v + avg_level + 10}) # Offset for visualization
+        target_curve.append({"f": f, "v": v + avg_level + 10})  # Offset for visualization
 
-    return bands, freqs, mag_db, side_mag_db, features, resonances, target_curve
+    # ── Down-sampled FFT data for interactive frontend chart (max 512 log-spaced points) ──
+    NUM_POINTS = 512
+    log_freqs = np.logspace(np.log10(20), np.log10(20000), NUM_POINTS)
+    fft_points_mid  = []
+    fft_points_side = []
+    for lf in log_freqs:
+        # Find nearest FFT bin
+        idx = int(np.argmin(np.abs(freqs - lf)))
+        fft_points_mid.append(round(float(mag_db[idx]), 2))
+        if side_mag_db is not None:
+            fft_points_side.append(round(float(side_mag_db[idx]), 2))
+    fft_export = {
+        "freqs": [round(float(f), 2) for f in log_freqs],
+        "mid":   fft_points_mid,
+        "side":  fft_points_side if fft_points_side else None,
+        "target_curve": target_curve,
+    }
+
+    return bands, freqs, mag_db, side_mag_db, features, resonances, target_curve, fft_export
 
 def audio_quality_metrics(samples, sr, spectral_features):
     mono = get_mono(samples)
@@ -556,74 +585,23 @@ def audio_quality_metrics(samples, sr, spectral_features):
         **spectral_features,
     }
 
-def plot_waveform_spectrum(samples, sr, freqs, mag_db, side_mag_db, target_curve, req_id, tag):
+def plot_waveform(samples, sr, req_id, tag):
+    """Render only the waveform PNG. Spectrum is now handled by Chart.js in the frontend."""
     plt.style.use('dark_background')
-    
     mono = get_mono(samples)
     t = np.arange(len(mono)) / sr
     w_filename = f"{req_id}_{tag}_waveform.png"
     w_png = os.path.join(app.config['IMAGE_FOLDER'], w_filename)
-    fig, ax = plt.subplots(figsize=(10,3))
+    fig, ax = plt.subplots(figsize=(10, 3))
     ax.plot(t, mono, color="#19d3c5", alpha=0.9, linewidth=0.55)
     ax.set_title(f"{tag} Waveform", color="#ffffff", fontsize=10)
     ax.axis('off')
     fig.patch.set_alpha(0.0)
     ax.patch.set_alpha(0.0)
-    plt.tight_layout(); plt.savefig(w_png, dpi=120, transparent=True); plt.close()
-    
-    names = [b[0] for b in BAND_DEFS]
-    
-    # Calculate average levels for Mix and Side
-    vals = []
-    side_vals = []
-    for _, lo, hi in BAND_DEFS:
-        b_mask = (freqs >= lo) & (freqs < hi)
-        if np.any(b_mask):
-            vals.append(float(np.mean(mag_db[b_mask])))
-            if side_mag_db is not None:
-                side_vals.append(float(np.mean(side_mag_db[b_mask])))
-        else:
-            vals.append(-110.0)
-            if side_mag_db is not None: side_vals.append(-110.0)
-
-    s_filename = f"{req_id}_{tag}_spectrum.png"
-    s_png = os.path.join(app.config['IMAGE_FOLDER'], s_filename)
-    fig, ax = plt.subplots(figsize=(10, 4.5))
-    
-    x = np.arange(len(names))
-    width = 0.35
-    
-    # Optional target line from target_curve
-    if target_curve:
-        target_vals = []
-        curve_freqs = np.array([p["f"] for p in target_curve], dtype=np.float64)
-        curve_vals = np.array([p["v"] for p in target_curve], dtype=np.float64)
-        for _, lo, hi in BAND_DEFS:
-            center = np.sqrt(lo * hi)
-            target_vals.append(float(np.interp(np.log10(center), np.log10(curve_freqs), curve_vals)))
-        ax.bar(x, target_vals, width*2.2, color="white", alpha=0.05, bottom=-110)
-        ax.hlines(target_vals, x - width, x + width, colors="white", linestyles="--", alpha=0.3)
-
-    ax.bar(x - (width/2 if side_vals else 0), vals, width, color="#19d3c5", label="Mix (Mid)", bottom=-110)
-    if side_vals:
-        ax.bar(x + (width/2), side_vals, width, color="#f472b6", label="Side", bottom=-110)
-
-    ax.set_ylim(-110, max(max(vals)+15, -40))
-    ax.set_xticks(x)
-    ax.set_xticklabels(names, color="white", fontsize=10, fontweight='bold')
-    ax.set_title(f"{tag} Spectral Balance", color="#ffffff", fontsize=12, pad=15)
-    ax.grid(True, axis='y', color="#ffffff", alpha=0.05)
-    ax.tick_params(axis='y', colors="#ffffff", labelsize=8)
-    
-    for spine in ax.spines.values():
-        spine.set_color('#ffffff')
-        spine.set_alpha(0.1)
-    
-    ax.legend(loc='upper right', frameon=False, fontsize=9, labelcolor='white')
-    fig.patch.set_alpha(0.0); ax.patch.set_alpha(0.0)
-    plt.tight_layout(); plt.savefig(s_png, dpi=140, transparent=True); plt.close()
-    
-    return f"/media/images/{w_filename}", f"/media/images/{s_filename}"
+    plt.tight_layout()
+    plt.savefig(w_png, dpi=120, transparent=True)
+    plt.close()
+    return f"/media/images/{w_filename}"
 
 def analyze_transients(samples, sr):
     """Onset detection + attack time + percussion energy – pure numpy, no librosa."""
@@ -646,7 +624,10 @@ def analyze_transients(samples, sr):
     # Positive flux (onset function)
     flux = np.diff(rms_frames)
     flux = np.maximum(flux, 0)
-    threshold = float(np.mean(flux) + 1.5 * np.std(flux))
+    # Robust Thresholding: Mean + 1.5*Std, with an absolute floor (min_threshold)
+    # to avoid ghost transients in near-silent or hyper-compressed material.
+    min_threshold = 0.001 # Spectral Flux floor
+    threshold = max(min_threshold, float(np.mean(flux) + 1.5 * np.std(flux)))
     onset_frames = np.where(flux > threshold)[0]
 
     duration_sec = len(mono) / sr
@@ -695,10 +676,10 @@ def analyze_slice(src, start, duration, tag, req_id, genre="Pop"):
                 
         rms_db, peak_db, crest, mid_side, level_details = levels(samples)
         loudness = loudness_snapshot(src, start=start, duration=duration)
-        bands, freqs, mag_db, side_mag_db, spectral_features, resonances, target_curve = band_distribution(samples, sr, genre)
+        bands, freqs, mag_db, side_mag_db, spectral_features, resonances, target_curve, fft_data = band_distribution(samples, sr, genre)
         quality = audio_quality_metrics(samples, sr, spectral_features)
         transients = analyze_transients(samples, sr)
-        w_url, s_url = plot_waveform_spectrum(samples, sr, freqs, mag_db, side_mag_db, target_curve, req_id, tag)
+        w_url = plot_waveform(samples, sr, req_id, tag)
         return dict(tag=tag, start=start, duration=duration, sr=sr,
                     rms_db=rms_db, peak_db=peak_db, crest_db=crest,
                     correlation=correlation, mid_side=mid_side, levels=level_details,
@@ -706,7 +687,8 @@ def analyze_slice(src, start, duration, tag, req_id, genre="Pop"):
                     loudness_method=loudness.get("method"),
                     bands=bands, quality=quality, resonances=resonances, target_curve=target_curve,
                     transients=transients,
-                    waveform_url=w_url, spectrum_url=s_url)
+                    fft_data=fft_data,
+                    waveform_url=w_url)
     finally:
         safe_remove(snippet)
 
@@ -932,10 +914,17 @@ def analysis_confidence(slices, total_duration):
     return {"score": score, "label": label, "issues": issues}
 
 def build_summary(slices, genre, total_duration, track_loudness=None):
-    target_slice = next((s for s in slices if s['tag'] == 'Middle'), slices[0])
+    if not slices:
+        # Initial empty state or only full track data available
+        target_slice = {}
+        aggregate = {}
+        confidence = {"score": 50, "label": "low", "issues": ["Awaiting slice analysis..."]}
+    else:
+        target_slice = next((s for s in slices if s['tag'] == 'Middle'), slices[0])
+        aggregate = aggregate_slices(slices)
+        confidence = analysis_confidence(slices, total_duration)
+
     profile = get_genre_profile(genre)
-    aggregate = aggregate_slices(slices)
-    confidence = analysis_confidence(slices, total_duration)
     target_lufs = profile["target_lufs"]
     track_lufs = (track_loudness or {}).get("I")
     measured_lufs = track_lufs if track_lufs is not None else aggregate.get("I") if aggregate.get("I") is not None else target_slice.get('I')
@@ -1082,6 +1071,19 @@ def genres():
         "genres": genre_profiles_payload(),
     })
 
+@app.route("/init_check")
+def init_check():
+    """System check for FFmpeg and environment status."""
+    ffmpeg_found = have_ffmpeg()
+    return jsonify({
+        "success": True,
+        "ffmpeg": ffmpeg_found,
+        "ffmpeg_path": FFMPEG_CMD if ffmpeg_found else None,
+        "os": sys.platform,
+        "version": "1.1.0-pro",
+        "data_dir": data_dir
+    })
+
 @app.route("/media/audio/<path:filename>")
 def media_audio(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
@@ -1124,14 +1126,20 @@ def upload():
     
     try:
         total = probe_duration(save_path)
-    except Exception:
+    except subprocess.TimeoutExpired:
         safe_remove(save_path)
-        return json_error("Could not determine duration.", 400)
+        return json_error("FFmpeg process timed out. The file might be too complex or corrupt.", 504)
+    except Exception as e:
+        safe_remove(save_path)
+        # Specific error messaging for public readiness
+        err_msg = str(e)
+        if "Invalid data found" in err_msg:
+            return json_error("Corrupt or invalid audio file format.", 400)
+        return json_error(f"Could not analyze file: {err_msg}", 400)
 
     slices_meta = build_slices_meta(total)
-    track_loudness = loudness_snapshot(save_path, start=0, duration=total)
-        
-    # Store initial analysis record
+    
+    # Initial analysis record - full track loudness moved to separate step
     initial_data = {
         "id": req_id,
         "filename": display_filename,
@@ -1140,7 +1148,7 @@ def upload():
         "total_duration": total,
         "slices": [],
         "slices_meta": slices_meta,
-        "track_loudness": track_loudness,
+        "track_loudness": None, # Will be filled by /analyze_full_track
         "audio_url": f"/media/audio/{save_filename}"
     }
     
@@ -1151,13 +1159,41 @@ def upload():
         )
         
     return jsonify({
-        "req_id": req_id,
-        "filename": display_filename,
-        "total_duration": total,
+        "success": True, 
+        "req_id": req_id, 
+        "filename": display_filename, 
+        "audio_url": initial_data["audio_url"],
         "slices_meta": slices_meta,
-        "track_loudness": track_loudness,
-        "audio_url": f"/media/audio/{save_filename}"
+        "total_duration": total
     })
+
+
+@app.route("/analyze_full_track/<req_id>", methods=["POST"])
+def analyze_full_track(req_id):
+    """Perform full-track loudness analysis asynchronously (called from frontend)."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute('SELECT data FROM analyses WHERE id = ?', (req_id,))
+        row = cursor.fetchone()
+        if not row:
+            return json_error("Analysis not found.", 404)
+        data = json.loads(row[0])
+    
+    filename = os.path.basename(data["audio_url"])
+    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    
+    if not os.path.exists(save_path):
+        return json_error("Audio file no longer exists.", 404)
+        
+    # Large file optimization: loudness_snapshot uses ffmpeg streaming
+    track_loudness = loudness_snapshot(save_path, start=0, duration=data["total_duration"])
+    
+    data["track_loudness"] = track_loudness
+    data["summary"] = build_summary(data["slices"], data["genre"], data["total_duration"], track_loudness=track_loudness)
+    
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('UPDATE analyses SET data = ? WHERE id = ?', (json.dumps(data), req_id))
+        
+    return jsonify({"success": True, "current_analysis": data})
 
 @app.route("/analyze_slice/<req_id>/<tag>", methods=["POST"])
 def analyze_slice_endpoint(req_id, tag):
@@ -1256,6 +1292,24 @@ def toggle_reference(req_id):
             return jsonify({"success": True, "is_reference": new_val})
         return json_error("Analysis not found.", 404)
 
+@app.route('/fft_data/<req_id>/<tag>', methods=['GET'])
+def get_fft_data(req_id, tag):
+    """Return pre-computed FFT data (512 log-spaced points) for a given analysis slice."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute('SELECT data FROM analyses WHERE id = ?', (req_id,))
+        row = cursor.fetchone()
+        if not row:
+            return json_error("Analysis not found.", 404)
+        data = json.loads(row[0])
+    slice_data = next((s for s in data.get("slices", []) if s.get("tag") == tag), None)
+    if not slice_data:
+        return json_error("Slice not found.", 404)
+    fft = slice_data.get("fft_data")
+    if not fft:
+        return json_error("FFT data not available for this slice.", 404)
+    return jsonify(fft)
+
+
 @app.route('/export_pdf', methods=['POST'])
 def export_pdf():
     """Browser-mode fallback: receives base64-encoded PDF and sends it as a download."""
@@ -1298,8 +1352,11 @@ if __name__ == "__main__":
                     if not path.lower().endswith('.pdf'):
                         path += '.pdf'
                     pdf_bytes = _b64.b64decode(base64_data)
+                    print(f"DEBUG: Saving PDF to {path}, size: {len(pdf_bytes)} bytes")
                     with open(path, 'wb') as fh:
                         fh.write(pdf_bytes)
+                        fh.flush()
+                        os.fsync(fh.fileno())
                     return {'success': True, 'path': path}
                 return {'success': False, 'cancelled': True}
             except Exception as exc:

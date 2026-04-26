@@ -19,7 +19,9 @@ const els = {
     genreSelect: document.getElementById('genreSelect'),
     loadingTitle: document.getElementById('loadingTitle'),
     progressBar: document.getElementById('analysisProgressBar'),
-    analysisSteps: document.getElementById('analysisSteps')
+    analysisSteps: document.getElementById('analysisSteps'),
+    isInstrumental: document.getElementById('isInstrumental'),
+    vocalToggleText: document.getElementById('vocalToggleText')
 };
 
 let analysisData = null;
@@ -105,7 +107,21 @@ const i18n = {
         'full-track': 'Gesamttrack',
         'slice-average': 'Schnitt-Mittel',
         'mastering-title': 'Mastering Assistant',
-        'mastering-sub': 'Top-Prioritäten für Balance und Master'
+        'mastering-sub': 'Top-Prioritäten für Balance und Master',
+        'vocal': 'Vocal',
+        'instrumental': 'Instrumental',
+        'toggle-hint': 'Enthält Vocals?',
+        'headphone-title': 'Headphone & Speaker Score',
+        'headphone-score': 'Kopfhörer',
+        'speaker-score': 'Lautsprecher',
+        'mono-compat': 'Mono-Tauglichkeit',
+        'phase-quality': 'Phasenqualität',
+        'track-type': 'Track-Typ',
+        'overall-score': 'Mix Score',
+        'transients-title': 'Transient Analyse',
+        'transient-density': 'Einsätze / Sek.',
+        'attack-time': 'Attack-Zeit',
+        'perc-energy': 'Percussion-Energie'
     },
     en: {
         subtitle: 'Audio Intelligence Dashboard - by Uwe Arthur Felchle',
@@ -181,7 +197,21 @@ const i18n = {
         'full-track': 'Full track',
         'slice-average': 'Slice average',
         'mastering-title': 'Mastering Assistant',
-        'mastering-sub': 'Top priority actions for your mix balance'
+        'mastering-sub': 'Top priority actions for your mix balance',
+        'vocal': 'Vocal',
+        'instrumental': 'Instrumental',
+        'toggle-hint': 'Contains vocals?',
+        'headphone-title': 'Headphone & Speaker Score',
+        'headphone-score': 'Headphones',
+        'speaker-score': 'Speakers',
+        'mono-compat': 'Mono Compatibility',
+        'phase-quality': 'Phase Quality',
+        'track-type': 'Track Type',
+        'overall-score': 'Mix Score',
+        'transients-title': 'Transient Analysis',
+        'transient-density': 'Onsets / sec',
+        'attack-time': 'Attack Time',
+        'perc-energy': 'Percussion Energy'
     }
 };
 
@@ -305,6 +335,11 @@ function getCurrentInsights() {
     return Array.isArray(payload) ? payload : [];
 }
 
+function updateVocalToggleLabel() {
+    if (!els.vocalToggleText || !els.isInstrumental) return;
+    els.vocalToggleText.textContent = els.isInstrumental.checked ? t('instrumental') : t('vocal');
+}
+
 function updateTexts() {
     document.documentElement.lang = currentLang;
     document.querySelector('header p').textContent = t('subtitle');
@@ -328,6 +363,7 @@ function updateTexts() {
     if (assistantTitle) assistantTitle.innerHTML = `<i class="fa-solid fa-magic"></i> ${t('mastering-title')}`;
     const assistantSub = document.querySelector('#masteringAssistant .assistant-header p');
     if (assistantSub) assistantSub.textContent = t('mastering-sub');
+    updateVocalToggleLabel();
 
     if (analysisData) {
         els.filenameDisplay.textContent = analysisData.filename;
@@ -347,6 +383,10 @@ document.querySelectorAll('.lang-switcher .lang-btn').forEach(btn => {
         updateTexts();
     });
 });
+
+if (els.isInstrumental) {
+    els.isInstrumental.addEventListener('change', updateVocalToggleLabel);
+}
 
 updateTexts();
 
@@ -648,10 +688,13 @@ async function uploadFile(file) {
     referenceData = null;
     els.compareSelect.value = '';
 
+    const isInstrumental = els.isInstrumental ? els.isInstrumental.checked : false;
+
     const formData = new FormData();
     formData.append('audio', file);
     formData.append('genre', els.genreSelect.value || defaultGenre);
     formData.append('lang', currentLang);
+    formData.append('is_instrumental', isInstrumental ? '1' : '0');
 
     try {
         const startData = await fetchJson('/upload', {
@@ -837,10 +880,20 @@ function renderSummary(data) {
     const confidence = summary.confidence || { score: 0, label: 'low' };
     const confidenceLabel = t(`confidence-${confidence.label || 'low'}`);
     const loudnessScope = t(summary.loudness_scope === 'full-track' ? 'full-track' : 'slice-average');
+    const overallScore = summary.overall_score != null ? summary.overall_score : null;
+    const scoreColor = overallScore == null ? '#fff'
+        : overallScore >= 80 ? 'var(--success)'
+        : overallScore >= 60 ? 'var(--warning)'
+        : 'var(--danger)';
 
     els.summaryStrip.className = `summary-strip ${summary.verdict || 'polish'}`;
     els.summaryStrip.innerHTML = `
         <div class="summary-chip primary"><span>${t(verdictKey)}</span><strong>${escapeHtml(data.genre)}</strong></div>
+        ${overallScore != null ? `<div class="summary-chip" style="border-color: ${scoreColor}33; background: ${scoreColor}12;">
+            <span>${t('overall-score')}</span>
+            <strong style="color: ${scoreColor}; font-size: 1.6rem;">${overallScore}</strong>
+            <small style="color: ${scoreColor};">/ 100</small>
+        </div>` : ''}
         <div class="summary-chip"><span>LUFS</span><strong>${fmt(summary.measured_lufs, '', 1)}</strong><small>${t('target')} ${fmt(summary.target_lufs, '', 0)} / ${loudnessScope}</small></div>
         <div class="summary-chip"><span>${t('correlation')}</span><strong>${fmt(summary.correlation, '', 2)}</strong></div>
         <div class="summary-chip"><span>${t('low-end')}</span><strong>${fmt(summary.low_end_percent, '%', 1)}</strong></div>
@@ -970,6 +1023,28 @@ function renderSlice(slice) {
                 <div class="metric-row"><span class="metric-label">${t('loudness-method')}</span><span class="metric-value compact">${escapeHtml(slice.loudness_method || 'N/A')}</span></div>
             </div>
 
+            <div class="card">
+                <h3><i class="fa-solid fa-bolt-lightning"></i> ${t('transients-title')}</h3>
+                ${(() => {
+                    const tr = slice.transients || {};
+                    const density = typeof tr.transient_density === 'number' ? tr.transient_density : null;
+                    const attack  = typeof tr.attack_time_ms === 'number' ? tr.attack_time_ms : null;
+                    const perc    = typeof tr.percussion_energy_pct === 'number' ? tr.percussion_energy_pct : null;
+                    const dc = density == null ? '#fff' : density < 1 ? 'var(--warning)' : density > 8 ? 'var(--danger)' : 'var(--success)';
+                    const ac = attack  == null ? '#fff' : attack > 30  ? 'var(--warning)' : attack < 4  ? 'var(--danger)' : 'var(--success)';
+                    const dpct = density == null ? 0 : Math.min(100, density / 12 * 100);
+                    const apct  = attack  == null ? 0 : Math.min(100, (1 - Math.max(0, attack - 4) / 76) * 100);
+                    const ppct  = perc    == null ? 0 : Math.min(100, perc);
+                    return `
+                        <div class="metric-row"><span class="metric-label">${t('transient-density')}</span><span class="metric-value" style="color:${dc}">${density != null ? density.toFixed(1) : 'N/A'}</span></div>
+                        <div class="band-meter" style="margin:-6px 0 12px"><span style="width:${dpct}%;background:${dc}"></span></div>
+                        <div class="metric-row"><span class="metric-label">${t('attack-time')}</span><span class="metric-value" style="color:${ac}">${attack != null ? attack.toFixed(0)+' ms' : 'N/A'}</span></div>
+                        <div class="band-meter" style="margin:-6px 0 12px"><span style="width:${apct}%;background:${ac}"></span></div>
+                        <div class="metric-row"><span class="metric-label">${t('perc-energy')}</span><span class="metric-value">${perc != null ? perc.toFixed(1)+'%' : 'N/A'}</span></div>
+                        <div class="band-meter" style="margin:-6px 0 0"><span style="width:${ppct}%"></span></div>`;
+                })()}
+            </div>
+
             <div class="card band-card">
                 <h3><i class="fa-solid fa-chart-simple"></i> ${t('bands')}</h3>
                 <div class="bands-container">
@@ -989,6 +1064,27 @@ function renderSlice(slice) {
                         <div class="resonance-list">${resonanceHtml}</div>
                     </div>
                 </div>
+            </div>
+
+            <div class="card">
+                <h3><i class="fa-solid fa-headphones"></i> ${t('headphone-title')}</h3>
+                ${(() => {
+                    const sc = computeHeadphoneScores(slice);
+                    const isInstr = analysisData && analysisData.is_instrumental;
+                    const badgeClass = isInstr ? 'instrumental' : 'vocal';
+                    const badgeIcon = isInstr ? 'fa-guitar' : 'fa-microphone';
+                    const badgeText = isInstr ? t('instrumental') : t('vocal');
+                    return `
+                        <div class="score-ring-wrap">
+                            ${scoreRingHtml('hp', 'hp', sc.headphone, t('headphone-score'))}
+                            ${scoreRingHtml('sp', 'sp', sc.speaker, t('speaker-score'))}
+                            <div class="score-detail">
+                                <div class="metric-row"><span class="metric-label">${t('mono-compat')}</span><span class="metric-value">${sc.monoCompat}%</span></div>
+                                <div class="metric-row"><span class="metric-label">${t('phase-quality')}</span><span class="metric-value">${sc.phaseQuality}%</span></div>
+                                <div class="metric-row"><span class="metric-label">${t('track-type')}</span><span class="metric-value"><span class="vocal-badge ${badgeClass}"><i class="fa-solid ${badgeIcon}"></i>${badgeText}</span></span></div>
+                            </div>
+                        </div>`;
+                })()}
             </div>
         </div>
     `;
@@ -1022,6 +1118,62 @@ function renderSlice(slice) {
                 }
             }
         }
+    });
+    animateScoreRings();
+}
+
+function computeHeadphoneScores(slice) {
+    const correlation = typeof slice.correlation === 'number' ? slice.correlation : 1.0;
+    const widthPct = (slice.mid_side && typeof slice.mid_side.width_pct === 'number') ? slice.mid_side.width_pct : 0;
+    const msRatioDb = (slice.mid_side && typeof slice.mid_side.ms_ratio_db === 'number') ? slice.mid_side.ms_ratio_db : 0;
+    const clipped = (slice.quality && typeof slice.quality.clipped_percent === 'number') ? slice.quality.clipped_percent : 0;
+
+    // Mono compatibility: high correlation = good mono compat
+    const monoCompat = Math.round(Math.max(0, Math.min(100, ((correlation + 1) / 2) * 100)));
+
+    // Phase quality: penalise extreme M/S ratio (>0dB side dominant)
+    const phaseQuality = Math.round(Math.max(0, Math.min(100, 100 - Math.max(0, msRatioDb) * 6)));
+
+    // Headphone score: needs good phase + some stereo width
+    const widthBonus = Math.min(20, widthPct * 0.4);
+    const headphone = Math.round(Math.max(0, Math.min(100,
+        monoCompat * 0.45 + phaseQuality * 0.35 + widthBonus + (clipped < 0.01 ? 10 : 0)
+    )));
+
+    // Speaker score: needs strong mono compat (low correlation penalty for stereo ok)
+    const speaker = Math.round(Math.max(0, Math.min(100,
+        monoCompat * 0.6 + phaseQuality * 0.3 + (clipped < 0.01 ? 10 : 0)
+    )));
+
+    return { headphone, speaker, monoCompat, phaseQuality };
+}
+
+function scoreRingHtml(id, cls, score, label) {
+    const circ = 264;
+    const offset = circ - (circ * score / 100);
+    return `
+        <div class="score-ring ${cls}" data-score="${score}" data-circ="${circ}">
+            <svg viewBox="0 0 96 96">
+                <circle class="ring-bg" cx="48" cy="48" r="42"/>
+                <circle class="ring-fill" id="ring-${id}" cx="48" cy="48" r="42"
+                    stroke-dasharray="${circ}" stroke-dashoffset="${circ}"/>
+            </svg>
+            <div class="ring-val">
+                <strong>${score}</strong>
+                <small>${escapeHtml(label)}</small>
+            </div>
+        </div>`;
+}
+
+function animateScoreRings() {
+    document.querySelectorAll('.score-ring[data-score]').forEach(ring => {
+        const fill = ring.querySelector('.ring-fill');
+        if (!fill) return;
+        const circ = parseFloat(ring.dataset.circ) || 264;
+        const score = parseFloat(ring.dataset.score) || 0;
+        requestAnimationFrame(() => {
+            fill.style.strokeDashoffset = String(circ - (circ * score / 100));
+        });
     });
 }
 

@@ -41,7 +41,7 @@
         <main>
             <section class="upload-section" id="uploadSection">
                 <div class="upload-options">
-                    <label for="genreSelect" class="field-label">Genre Profil:</label>
+                    <label for="genreSelect" class="field-label" id="genreLabelEl">Genre Profil:</label>
                     <select id="genreSelect" class="glass-input">
                         <option value="Pop">Pop</option>
                         <option value="EDM / Electronic">EDM / Electronic</option>
@@ -55,6 +55,15 @@
                         <option value="Lo-Fi / Chillhop">Lo-Fi / Chillhop</option>
                         <option value="Podcast / Spoken Word">Podcast / Spoken Word</option>
                     </select>
+                    <!-- Vocal / Instrumental toggle -->
+                    <div class="vocal-toggle" id="vocalToggleWrap">
+                        <input type="checkbox" id="isInstrumental" class="vocal-checkbox">
+                        <label for="isInstrumental" class="vocal-toggle-label">
+                            <span class="vt-icon vocal-icon"><i class="fa-solid fa-microphone"></i></span>
+                            <span class="vt-icon instr-icon"><i class="fa-solid fa-guitar"></i></span>
+                            <span id="vocalToggleText">Vocal</span>
+                        </label>
+                    </div>
                 </div>
                 <div id="statusMessage" class="status-message hidden" role="status" aria-live="polite"></div>
                 

@@ -625,6 +625,58 @@ def plot_waveform_spectrum(samples, sr, freqs, mag_db, side_mag_db, target_curve
     
     return f"/media/images/{w_filename}", f"/media/images/{s_filename}"
 
+def analyze_transients(samples, sr):
+    """Onset detection + attack time + percussion energy – pure numpy, no librosa."""
+    mono = get_mono(samples)
+    if mono.size == 0 or sr == 0:
+        return {"transient_density": 0.0, "attack_time_ms": 0.0, "percussion_energy_pct": 0.0}
+
+    frame_len = 1024
+    hop = 512
+    n_frames = (len(mono) - frame_len) // hop
+    if n_frames < 2:
+        return {"transient_density": 0.0, "attack_time_ms": 0.0, "percussion_energy_pct": 0.0}
+
+    # Frame-wise RMS
+    rms_frames = np.array([
+        np.sqrt(np.mean(mono[i * hop: i * hop + frame_len] ** 2))
+        for i in range(n_frames)
+    ], dtype=np.float32)
+
+    # Positive flux (onset function)
+    flux = np.diff(rms_frames)
+    flux = np.maximum(flux, 0)
+    threshold = float(np.mean(flux) + 1.5 * np.std(flux))
+    onset_frames = np.where(flux > threshold)[0]
+
+    duration_sec = len(mono) / sr
+    transient_density = round(len(onset_frames) / duration_sec, 2) if duration_sec > 0 else 0.0
+
+    # Attack time: frames from onset to local peak (within 80ms)
+    lookahead = max(1, int(0.08 * sr / hop))
+    attack_times = []
+    for idx in onset_frames:
+        end = min(idx + lookahead, len(rms_frames) - 1)
+        if end > idx:
+            peak_offset = int(np.argmax(rms_frames[idx:end + 1]))
+            attack_times.append(peak_offset * hop / sr * 1000.0)
+    attack_time_ms = round(float(np.mean(attack_times)), 1) if attack_times else 15.0
+
+    # Percussion energy: spectral energy > 3 kHz relative to total
+    n = 1 << max((len(mono) - 1).bit_length(), 10)
+    X = np.fft.rfft(mono, n=n)
+    freqs = np.fft.rfftfreq(n, d=1.0 / sr)
+    power = np.abs(X) ** 2
+    total_power = float(power.sum()) + 1e-12
+    perc_power = float(power[freqs >= 3000].sum())
+    percussion_energy_pct = round(perc_power / total_power * 100.0, 1)
+
+    return {
+        "transient_density": transient_density,
+        "attack_time_ms": attack_time_ms,
+        "percussion_energy_pct": percussion_energy_pct,
+    }
+
 def analyze_slice(src, start, duration, tag, req_id, genre="Pop"):
     snippet = os.path.join(app.config['SNIPPET_FOLDER'], f"_snippet_{req_id}_{tag}.wav")
     try:
@@ -645,6 +697,7 @@ def analyze_slice(src, start, duration, tag, req_id, genre="Pop"):
         loudness = loudness_snapshot(src, start=start, duration=duration)
         bands, freqs, mag_db, side_mag_db, spectral_features, resonances, target_curve = band_distribution(samples, sr, genre)
         quality = audio_quality_metrics(samples, sr, spectral_features)
+        transients = analyze_transients(samples, sr)
         w_url, s_url = plot_waveform_spectrum(samples, sr, freqs, mag_db, side_mag_db, target_curve, req_id, tag)
         return dict(tag=tag, start=start, duration=duration, sr=sr,
                     rms_db=rms_db, peak_db=peak_db, crest_db=crest,
@@ -652,11 +705,12 @@ def analyze_slice(src, start, duration, tag, req_id, genre="Pop"):
                     I=loudness.get("I"), LRA=loudness.get("LRA"), TP=loudness.get("TP"), SP=peak_db if loudness.get("SP") is None else loudness.get("SP"),
                     loudness_method=loudness.get("method"),
                     bands=bands, quality=quality, resonances=resonances, target_curve=target_curve,
+                    transients=transients,
                     waveform_url=w_url, spectrum_url=s_url)
     finally:
         safe_remove(snippet)
 
-def get_insights(slices, genre, lang="de", track_loudness=None):
+def get_insights(slices, genre, lang="de", track_loudness=None, is_instrumental=False):
     insights = []
     target_slice = next((s for s in slices if s['tag'] == 'Middle'), slices[0])
     profile = get_genre_profile(genre)
@@ -675,6 +729,9 @@ def get_insights(slices, genre, lang="de", track_loudness=None):
     lufs_low, lufs_high = profile["lufs_range"]
     crest_low, crest_high = profile["crest_range"]
     low_end_min, low_end_max = profile["low_end_range"]
+    # Vocal tracks need more presence energy; instrumentals are looser
+    presence_max = profile["presence_max"] if is_instrumental else profile["presence_max"] - 4
+    presence_vocal_min = 18 if not is_instrumental else 0  # vocals need mids
     
     if quality.get("clipped_percent", 0) > 0.05:
         insights.append({
@@ -772,12 +829,20 @@ def get_insights(slices, genre, lang="de", track_loudness=None):
         })
         priority_actions.append(f"Tame harsh resonance at {top_res['freq']} Hz." if lang == "en" else f"Harte Resonanz bei {top_res['freq']} Hz bändigen.")
 
-    if presence_pct > profile["presence_max"]:
+    if presence_pct > presence_max:
         insights.append({
             "title": "Harshness in upper mids" if lang == "en" else "Harshness in den oberen Mitten",
             "desc": f"Energy between 1-5 kHz is {presence_pct:.1f}%, above this profile's comfort zone." if lang == "en" else f"Die Energie zwischen 1-5 kHz liegt bei {presence_pct:.1f}% und damit über der Komfortzone dieses Profils.",
             "vst": "Oeksound Soothe2, FabFilter Pro-DS, Gullfoss",
             "action": "Check vocals, cymbals, and synths for resonances. Use a de-esser or a dynamic EQ." if lang == "en" else "Überprüfe Vocals, Cymbals und Synths auf Resonanzen. Nutze De-Esser oder einen dynamischen EQ."
+        })
+
+    if not is_instrumental and presence_pct < presence_vocal_min:
+        insights.append({
+            "title": "Vocals may lack presence" if lang == "en" else "Vocals könnten Präsenz fehlen",
+            "desc": f"Mid-range energy (1-5 kHz) is only {presence_pct:.1f}% — vocals may sound distant or thin." if lang == "en" else f"Die Mitten-Energie (1-5 kHz) ist nur {presence_pct:.1f}% — Vocals könnten dünn oder weit entfernt klingen.",
+            "vst": "FabFilter Pro-Q 3, Neve 1073, API 550",
+            "action": "Boost a wide shelf around 2-4 kHz on the vocal bus or reduce competing mid instruments." if lang == "en" else "Hebe einen breiten Shelf bei 2-4 kHz auf dem Vocal-Bus an oder reduziere konkurrierende Mitten-Instrumente."
         })
 
     if brilliance_pct > 18 and genre not in ["Classical / Orchestral", "Film Score"]:
@@ -786,6 +851,27 @@ def get_insights(slices, genre, lang="de", track_loudness=None):
             "desc": f"Brilliance above 12 kHz is unusually high at {brilliance_pct:.1f}%." if lang == "en" else f"Die Brillanz über 12 kHz ist mit {brilliance_pct:.1f}% ungewöhnlich hoch.",
             "vst": "FabFilter Pro-Q 3, TDR Nova",
             "action": "Check cymbals, exciters, and broad high-shelf boosts. Try a gentle dynamic high shelf." if lang == "en" else "Prüfe Cymbals, Exciter und breite High-Shelf-Boosts. Teste ein sanftes dynamisches High-Shelf."
+        })
+
+    # Transient Insights
+    transients = target_slice.get("transients", {})
+    t_density = transients.get("transient_density", 0.0) if transients else 0.0
+    t_attack = transients.get("attack_time_ms", 15.0) if transients else 15.0
+    crest_low_t, crest_high_t = profile["crest_range"]
+    if t_density > 0 and t_density < 1.0 and t_attack > 30 and crest is not None and crest < crest_low_t:
+        insights.append({
+            "title": "Transients over-compressed" if lang == "en" else "Transienten überkomprimiert",
+            "desc": f"Only {t_density:.1f} onsets/sec with slow average attack {t_attack:.0f} ms — punch has been squeezed out." if lang == "en" else f"Nur {t_density:.1f} Einsätze/Sek. mit langsamem Anschlag ({t_attack:.0f} ms) — der Punch wurde herausgepresst.",
+            "vst": "SPL Transient Designer, Oeksound Spiff, Waves Smack Attack",
+            "action": "Increase attack time on your bus compressor or use a transient shaper to restore punch." if lang == "en" else "Verlängere die Attack-Zeit deines Bus-Kompressors oder nutze einen Transient Shaper, um den Punch zurückzuholen."
+        })
+        priority_actions.append("Restore punch — transients over-compressed." if lang == "en" else "Punch zurückbringen — Transienten überkomprimiert.")
+    elif t_density > 8 and t_attack < 4:
+        insights.append({
+            "title": "Very fast / hyper-transient mix" if lang == "en" else "Sehr schnelle Transienten",
+            "desc": f"{t_density:.1f} onsets/sec with extremely fast attack ({t_attack:.0f} ms). May cause listening fatigue." if lang == "en" else f"{t_density:.1f} Einsätze/Sek. mit sehr schnellem Anschlag ({t_attack:.0f} ms). Kann zu Ermüdung führen.",
+            "vst": "FabFilter Pro-C 2, Klanghelm MJUC",
+            "action": "Add light parallel compression to smooth transient spikes without killing dynamics." if lang == "en" else "Füge leichte Parallelkompression hinzu, um Transientenspitzen zu glätten ohne die Dynamik zu zerstören."
         })
 
     if not insights:
@@ -873,6 +959,46 @@ def build_summary(slices, genre, total_duration, track_loudness=None):
         verdict = "needs-attention"
     else:
         verdict = "polish"
+    verdict_scores = {"ready": 100, "polish": 72, "needs-attention": 45, "measurement-limited": 50}
+    base = verdict_scores.get(verdict, 60)
+
+    # Weighted overall mix score (0–100)
+    def _score_lufs(delta):
+        if delta is None: return 50
+        return max(0, 100 - abs(delta) * 7)
+
+    def _score_corr(corr, min_corr):
+        if corr is None: return 50
+        if corr >= min_corr: return min(100, int(corr * 100))
+        return max(0, int(corr * 100) - 20)
+
+    def _score_low(low, lo, hi):
+        if low is None: return 70
+        if lo <= low <= hi: return 100
+        excess = max(abs(low - lo), abs(low - hi))
+        return max(0, 100 - int(excess * 4))
+
+    def _score_crest(cr, lo, hi):
+        if cr is None: return 70
+        if lo <= cr <= hi: return 100
+        excess = max(abs(cr - lo), abs(cr - hi))
+        return max(0, 100 - int(excess * 5))
+
+    s_lufs  = _score_lufs(lufs_delta)
+    s_corr  = _score_corr(correlation, profile["correlation_min"])
+    s_low   = _score_low(low_end, profile["low_end_range"][0], profile["low_end_range"][1])
+    s_crest = _score_crest(crest, profile["crest_range"][0], profile["crest_range"][1])
+    s_clip  = 100 if clipped <= 0.01 else max(0, 100 - int(clipped * 200))
+
+    overall_score = int(
+        s_lufs  * 0.28 +
+        s_corr  * 0.25 +
+        s_low   * 0.20 +
+        s_crest * 0.15 +
+        s_clip  * 0.12
+    )
+    overall_score = max(0, min(100, overall_score))
+
     return {
         "slice": target_slice.get('tag'),
         "target_lufs": target_lufs,
@@ -887,6 +1013,11 @@ def build_summary(slices, genre, total_duration, track_loudness=None):
         "aggregate": aggregate,
         "verdict": verdict,
         "slice_count": len(slices),
+        "overall_score": overall_score,
+        "score_components": {
+            "lufs": s_lufs, "correlation": s_corr,
+            "low_end": s_low, "crest": s_crest, "clipping": s_clip
+        },
     }
 
 def cleanup_old_files():
@@ -985,6 +1116,7 @@ def upload():
     req_id = uuid.uuid4().hex[:10]
     ext = os.path.splitext(secure_filename(file.filename))[1].lower() or os.path.splitext(file.filename)[1].lower()
     display_filename = os.path.basename(file.filename.replace("\\", "/"))
+    is_instrumental = request.form.get('is_instrumental', '0') == '1'
     
     save_filename = f"upload_{req_id}{ext}"
     save_path = os.path.join(app.config['UPLOAD_FOLDER'], save_filename)
@@ -1004,6 +1136,7 @@ def upload():
         "id": req_id,
         "filename": display_filename,
         "genre": genre,
+        "is_instrumental": is_instrumental,
         "total_duration": total,
         "slices": [],
         "slices_meta": slices_meta,
@@ -1075,13 +1208,14 @@ def analyze_slice_endpoint(req_id, tag):
         lang = request.args.get('lang', 'de')
         latest_data.setdefault("slices_meta", slices_meta)
         track_loudness = latest_data.get("track_loudness")
+        is_instrumental = latest_data.get("is_instrumental", False)
         latest_data["summary"] = build_summary(latest_data["slices"], latest_data["genre"], total, track_loudness)
         
         # New Insights Structure
-        insights_payload = get_insights(latest_data["slices"], latest_data["genre"], "de", track_loudness)
+        insights_payload = get_insights(latest_data["slices"], latest_data["genre"], "de", track_loudness, is_instrumental)
         latest_data["insights_by_lang"] = {
             "de": insights_payload,
-            "en": get_insights(latest_data["slices"], latest_data["genre"], "en", track_loudness),
+            "en": get_insights(latest_data["slices"], latest_data["genre"], "en", track_loudness, is_instrumental),
         }
         latest_data["priority_actions"] = insights_payload.get("priority_actions", [])
         latest_data["insights"] = latest_data["insights_by_lang"].get(lang, latest_data["insights_by_lang"]["de"]).get("insights", [])

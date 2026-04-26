@@ -1142,3 +1142,171 @@ header p {
         transition-duration: 0.001ms !important;
     }
 }
+
+/* ─── Vocal / Instrumental Toggle ─────────────────────────── */
+.vocal-toggle {
+    display: flex;
+    align-items: center;
+    margin-left: 4px;
+}
+
+.vocal-checkbox {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.vocal-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 18px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--primary-color);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.vocal-toggle-label:hover {
+    border-color: var(--primary-color);
+    background: rgba(25, 211, 197, 0.1);
+}
+
+.vocal-toggle-label .vt-icon {
+    font-size: 0.9rem;
+    transition: opacity 0.25s, transform 0.25s;
+}
+
+/* default (vocal): show mic, hide guitar */
+.vocal-icon { opacity: 1; transform: scale(1); }
+.instr-icon { opacity: 0; position: absolute; transform: scale(0.7); }
+
+/* checked (instrumental): show guitar, hide mic */
+.vocal-checkbox:checked ~ .vocal-toggle-label {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.vocal-checkbox:checked ~ .vocal-toggle-label .vocal-icon {
+    opacity: 0;
+    transform: scale(0.7);
+    position: absolute;
+}
+
+.vocal-checkbox:checked ~ .vocal-toggle-label .instr-icon {
+    opacity: 1;
+    transform: scale(1);
+    position: static;
+}
+
+/* ─── Headphone / Speaker Score ─────────────────────────── */
+.score-ring-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 28px;
+    flex-wrap: wrap;
+    padding: 8px 0 18px;
+}
+
+.score-ring {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    flex-shrink: 0;
+}
+
+.score-ring svg {
+    transform: rotate(-90deg);
+    width: 96px;
+    height: 96px;
+}
+
+.score-ring circle {
+    fill: none;
+    stroke-width: 7;
+    stroke-linecap: round;
+}
+
+.score-ring .ring-bg {
+    stroke: rgba(255, 255, 255, 0.07);
+}
+
+.score-ring .ring-fill {
+    stroke-dasharray: 264;
+    stroke-dashoffset: 264;
+    transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.score-ring .ring-val {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
+}
+
+.score-ring .ring-val strong {
+    font-size: 1.35rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.score-ring .ring-val small {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 700;
+}
+
+.score-ring.hp .ring-fill  { stroke: var(--primary-color); }
+.score-ring.hp .ring-val strong { color: var(--primary-color); }
+.score-ring.sp .ring-fill  { stroke: var(--accent-color); }
+.score-ring.sp .ring-val strong { color: var(--accent-color); }
+
+.score-detail {
+    flex: 1;
+    min-width: 150px;
+}
+
+.score-detail .metric-row {
+    padding: 9px 0;
+}
+
+.vocal-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 6px;
+}
+
+.vocal-badge.vocal {
+    background: rgba(25, 211, 197, 0.12);
+    border: 1px solid rgba(25, 211, 197, 0.3);
+    color: var(--primary-color);
+}
+
+.vocal-badge.instrumental {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: var(--accent-color);
+}

@@ -1,53 +1,51 @@
 # 🦌 Funky Moose Mix Analyzer Pro
 
-**Ein lokaler Mix-Analyzer für Musiker:innen, die schnell verstehen wollen, was ihr Master gerade macht.** 
+**A local mix analyzer for musicians who want to quickly understand what their master is actually doing.** 
 
-Kein Ersatz für deine Ohren – aber ein verdammt guter zweiter Blick. Der Funky Moose Mix Analyzer Pro ist ein Werkzeug für das Home-Studio, das deine Audio-Exporte gegen bewährte Genre-Standards prüft. Es liefert dir objektive Metriken zu Lautheit, Frequenzbalance und Phasenlage, ohne deine Tracks in eine Cloud hochladen zu müssen.
+No replacement for your ears – but a damn good second pair of eyes. The Funky Moose Mix Analyzer Pro is a tool for your home studio that checks your audio exports against proven genre standards. It gives you objective metrics on loudness, frequency balance, and phase correlation—without ever uploading your tracks to a cloud.
 
 ![Upload Screen](assets/screenshots/upload_screen.png)
 
 ---
 
-## ✨ Was der Elch kann
+## ✨ Moose Power
 
-*   **Interaktive FFT-Analyse**: Schau dir dein Frequenzspektrum im Detail an. Inklusive Hover-Werten, M/S-Darstellung und Zielkurven.
-*   **Ehrlicher Track-Vergleich (A/B)**: Lade Referenztracks und vergleiche sie direkt mit deinem Mix. Die Differenzkurve zeigt dir sofort, wo du im Vergleich zu deinem Vorbild stehst.
-
-![Analysis Dashboard](assets/screenshots/analysis_dashboard.png)
-
-*   **Genre-Referenzkurven**: Über 30 Profile von Techno über Rock bis Podcast helfen dir, die richtige Balance zu finden.
-*   **Funky Moose Advice Engine**: Statt leerer AI-Buzzwords gibt es handfeste Tipps basierend auf deinen Messwerten – von "Low-End aufräumen" bis zu Resonanz-Warnungen.
+*   **Interactive FFT Analysis**: Dive deep into your frequency spectrum. Includes hover values, M/S representation, and target curves.
+*   **Honest Track Comparison (A/B)**: Load reference tracks and compare them directly with your mix. The difference curve immediately shows you where you stand compared to your idol.
+*   **Genre Reference Curves**: Over 30 profiles ranging from Techno to Rock to Podcasts help you find the right balance.
+*   **Funky Moose Advice Engine**: Instead of empty AI buzzwords, you get solid tips based on your actual measurements – from "clean up the low end" to resonance warnings.
 
 ![Advice Engine](assets/screenshots/advice_engine.png)
-*   **Loudness & Dynamics**: Messung von LUFS (EBU R128), True Peak und Crest-Faktor für einen wettbewerbsfähigen Pegel.
-*   **Privacy First**: Deine Musik ist heilig. Alle Analysen laufen 100% lokal auf deinem Rechner.
+
+*   **Loudness & Dynamics**: Measuring LUFS (EBU R128), True Peak, and Crest Factor for a competitive level.
+*   **Privacy First**: Your music is sacred. All analyses run 100% locally on your machine.
 
 ---
 
-## 🚀 Installation & Start
+## 🚀 Installation & Launch
 
-### Für Musiker & Produzenten
-Die native macOS App (.app / .dmg) ist in Arbeit. Bis dahin kannst du das Tool einfach über das Terminal starten.
+### For Musicians & Producers
+The native macOS app (.app / .dmg) is in the works. Until then, you can easily start the tool via the terminal.
 
-### Für Entwickler (und Neugierige)
-Stelle sicher, dass **FFmpeg** installiert ist:
+### For Developers (and the Curious)
+Make sure **FFmpeg** is installed:
 *   **macOS**: `brew install ffmpeg`
 *   **Windows**: `choco install ffmpeg`
 
-1. Repository klonen:
+1. Clone the repository:
    ```bash
    git clone https://github.com/blubass/FunkyMooseMixAnalyzerPro.git
    cd FunkyMooseMixAnalyzerPro
    ```
 
-2. Virtuelle Umgebung erstellen (empfohlen):
+2. Create a virtual environment (recommended):
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate  # macOS/Linux
-   # oder: .venv\Scripts\activate  # Windows
+   # or: .venv\Scripts\activate  # Windows
    ```
 
-3. Abhängigkeiten installieren & Starten:
+3. Install dependencies & Start:
    ```bash
    pip install -r requirements.txt
    python app.py
@@ -57,56 +55,56 @@ Stelle sicher, dass **FFmpeg** installiert ist:
 
 ## 🧪 Test Run
 
-Um die mathematische Genauigkeit der Engine zu prüfen, kannst du automatisierte Tests gegen das laufende Backend fahren.
+To check the mathematical accuracy of the engine, you can run automated tests against the running backend.
 
-1. Starte die App (`python app.py`).
-2. Lege eigene Test-Dateien in `tests/test_files/` ab:
+1. Start the app (`python app.py`).
+2. Drop your own test files into `tests/test_files/`:
    * `loud_master.wav`
    * `dynamic_track.wav`
    * `problematic_bass.wav`
-3. Starte den Runner:
+3. Run the runner:
    ```bash
    bash tests/run_tests.sh
    ```
 
-*Hinweis: Testdateien sind nicht im Repository enthalten, um die Größe gering zu halten.*
+*Note: Test files are not included in the repository to keep the size small.*
 
 ---
 
-## 🏗️ macOS App bauen
+## 🏗️ Building the macOS App
 
-Du kannst das native macOS Bundle (`.app`) und den Installer (`.dmg`) selbst generieren:
+You can generate the native macOS bundle (`.app`) and the installer (`.dmg`) yourself:
 
-1. **Abhängigkeiten**:
+1. **Dependencies**:
    ```bash
    pip install pyinstaller
    ```
-2. **App bauen**:
+2. **Build App**:
    ```bash
    bash scripts/build_macos_app.sh
    ```
-3. **DMG erstellen**:
+3. **Create DMG**:
    ```bash
    bash scripts/make_dmg.sh
    ```
 
 ---
 
-## 🛠 Technik hinter dem Geweih
+## 🛠 The Tech behind the Antlers
 
 *   **Backend**: Python & Flask
-*   **Audio-Engine**: NumPy & FFmpeg (Loudness & Decoding)
-*   **Frontend**: PyWebView & Chart.js für interaktive Visualisierungen.
-*   **Datenbank**: SQLite für deine lokale Analyse-Historie.
+*   **Audio Engine**: NumPy & FFmpeg (Loudness & Decoding)
+*   **Frontend**: PyWebView & Chart.js for interactive visualizations.
+*   **Database**: SQLite for your local analysis history.
 
 ---
 
-## 🔬 Für die Nerds (Mathematik)
-Der Analyzer nutzt Fast Fourier Transformation (FFT) mit Hann-Windowing für präzise Frequenzauflösung. Die Onset-Detection basiert auf Spectral Flux mit einem adaptiven Noise-Floor, um auch bei stark limitiertem Material ("Sausage-Waveform") präzise Transienten zu finden.
+## 🔬 For the Nerds (Mathematics)
+The analyzer uses Fast Fourier Transformation (FFT) with Hann windowing for precise frequency resolution. The onset detection is based on Spectral Flux with an adaptive noise floor to find precise transients even in heavily limited material ("sausage waveforms").
 
 ---
 
-## 📄 Lizenz
-Dieses Projekt steht unter der **MIT-Lizenz** – nutze es, verbessere es, mach Musik damit.
+## 📄 License
+This project is licensed under the **MIT License** – use it, improve it, make music with it.
 
-*Entwickelt mit Herz & Elchblut von Uwe Arthur Felchle*
+*Developed with heart & moose blood by Uwe Arthur Felchle*

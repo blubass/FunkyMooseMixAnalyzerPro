@@ -1,3 +1,11 @@
+![Funky Moose Banner](assets/screenshots/banner.png)
+
+<p align="center">
+  <img src="https://img.shields.io/github/license/blubass/FunkyMooseMixAnalyzerPro?color=00f2fe&style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/version-1.1.0--pro-magenta?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/platform-macOS%20|%20Windows-blueviolet?style=flat-square" alt="Platform">
+</p>
+
 # 🦌 Funky Moose Mix Analyzer Pro
 
 [🇬🇧 English Version](#) | [🇩🇪 Deutsche Version](README_DE.md)

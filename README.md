@@ -1,5 +1,7 @@
 # 🦌 Funky Moose Mix Analyzer Pro
 
+[🇬🇧 English Version](#) | [🇩🇪 Deutsche Version](README_DE.md)
+
 **A local mix analyzer for musicians who want to quickly understand what their master is actually doing.** 
 
 No replacement for your ears – but a damn good second pair of eyes. The Funky Moose Mix Analyzer Pro is a tool for your home studio that checks your audio exports against proven genre standards. It gives you objective metrics on loudness, frequency balance, and phase correlation—without ever uploading your tracks to a cloud.

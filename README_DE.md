@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/github/license/blubass/FunkyMooseMixAnalyzerPro?color=00f2fe&style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/version-1.1.0--pro-magenta?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-v0.9--beta-magenta?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20|%20Windows-blueviolet?style=flat-square" alt="Platform">
 </p>
 
@@ -34,8 +34,8 @@ Kein Ersatz für deine Ohren – aber ein verdammt guter zweiter Blick. Der Funk
 
 ## 🚀 Installation & Start
 
-### Für Musiker & Produzenten
-Die native macOS App (.app / .dmg) ist in Arbeit. Bis dahin kannst du das Tool einfach über das Terminal starten.
+### Für Musiker:innen & Produzent:innen
+Eine macOS-Beta kann lokal gebaut werden. Öffentliche Downloads folgen nach weiteren Tests. Bis dahin kannst du das Tool einfach über das Terminal starten.
 
 ### Für Entwickler (und Neugierige)
 Stelle sicher, dass **FFmpeg** installiert ist:

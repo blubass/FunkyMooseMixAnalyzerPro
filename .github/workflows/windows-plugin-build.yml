@@ -1,0 +1,68 @@
+name: Windows Plugin Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - "plugin/**"
+      - ".github/workflows/windows-plugin-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build VST3 and Standalone on Windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout JUCE
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/juce-framework/JUCE.git "$env:RUNNER_TEMP\JUCE"
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S plugin -B build `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DMIX_ANALYZER_JUCE_DIR="$env:RUNNER_TEMP\JUCE"
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+
+          Get-ChildItem -Path build/FunkyMooseMixAnalyzer_artefacts -Recurse -Directory -Filter "*.vst3" |
+            ForEach-Object {
+              Copy-Item $_.FullName -Destination "dist/$($_.Name)" -Recurse -Force
+            }
+
+          Get-ChildItem -Path build/FunkyMooseMixAnalyzer_artefacts -Recurse -File -Filter "*.exe" |
+            Where-Object { $_.FullName -match "\\Standalone\\" } |
+            ForEach-Object {
+              Copy-Item $_.FullName -Destination "dist/$($_.Name)" -Force
+            }
+
+          if (-not (Get-ChildItem -Path dist -Recurse | Where-Object { -not $_.PSIsContainer })) {
+            throw "No Windows plugin artifacts were collected."
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Funky-Moose-Mix-Analyzer-Windows
+          path: dist/**
+          if-no-files-found: error

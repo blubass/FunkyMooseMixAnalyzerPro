@@ -66,6 +66,16 @@ cmake --build plugin/build --config Release --target FunkyMooseMixAnalyzerAllTes
 ctest --test-dir plugin/build --build-config Release --output-on-failure
 ```
 
+## Host validation
+
+Release builds run Tracktion pluginval at strictness level 5 before packaging.
+Locally, download pluginval from the Tracktion/pluginval release page and run:
+
+```bash
+pluginval --strictness-level 5 "plugin/artifacts/Funky Moose Mix Analyzer.vst3"
+pluginval --strictness-level 5 "plugin/artifacts/Funky Moose Mix Analyzer.component"
+```
+
 ## Install for Cubase / AU hosts
 
 Cubase scans the standard VST3 folders, not this repository's `plugin/artifacts`
@@ -85,4 +95,4 @@ sudo bash plugin/install_macos.sh --system --reset-cubase-cache
 ## Next plugin steps
 
 - Add a deeper report/export bridge between the plugin and the desktop app.
-- Add host/plugin validation with pluginval or similar before public releases.
+- Add signed/notarized macOS release packaging for smoother first launch.

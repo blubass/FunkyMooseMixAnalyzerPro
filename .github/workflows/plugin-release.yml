@@ -17,6 +17,8 @@ permissions:
 env:
   PRODUCT_NAME: "Funky Moose Mix Analyzer"
   RELEASE_BASENAME: "Funky-Moose-Mix-Analyzer"
+  PLUGINVAL_VERSION: "v1.0.4"
+  PLUGINVAL_STRICTNESS: "5"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
@@ -52,7 +54,26 @@ jobs:
         run: |
           ctest --test-dir build --build-config Release --output-on-failure
 
-      - name: Package macOS artifacts
+      - name: Install pluginval
+        run: |
+          set -euo pipefail
+
+          curl -fsSL \
+            -o "$RUNNER_TEMP/pluginval_macOS.zip" \
+            "https://github.com/Tracktion/pluginval/releases/download/${PLUGINVAL_VERSION}/pluginval_macOS.zip"
+          unzip -q "$RUNNER_TEMP/pluginval_macOS.zip" -d "$RUNNER_TEMP/pluginval"
+          xattr -dr com.apple.quarantine "$RUNNER_TEMP/pluginval" || true
+
+          pluginval="$(find "$RUNNER_TEMP/pluginval" -type f -path "*/pluginval.app/Contents/MacOS/pluginval" -print -quit)"
+          if [[ -z "$pluginval" ]]; then
+            echo "::error::pluginval executable was not found."
+            exit 1
+          fi
+
+          chmod +x "$pluginval"
+          echo "PLUGINVAL=$pluginval" >> "$GITHUB_ENV"
+
+      - name: Package and validate macOS artifacts
         run: |
           set -euo pipefail
 
@@ -89,6 +110,9 @@ jobs:
             codesign --force --deep --sign - "$bundle"
             codesign --verify --deep "$bundle"
           done
+
+          "$PLUGINVAL" --strictness-level "$PLUGINVAL_STRICTNESS" "$package_root/${PRODUCT_NAME}.vst3"
+          "$PLUGINVAL" --strictness-level "$PLUGINVAL_STRICTNESS" "$package_root/${PRODUCT_NAME}.component"
 
           cat > "$package_root/README_MACOS_DE_EN.txt" <<'README'
           Funky Moose Mix Analyzer - macOS Build
@@ -194,7 +218,27 @@ jobs:
         run: |
           ctest --test-dir build --build-config Release --output-on-failure
 
-      - name: Package Windows artifacts
+      - name: Install pluginval
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $zip = "$env:RUNNER_TEMP\pluginval_Windows.zip"
+          $target = "$env:RUNNER_TEMP\pluginval"
+          Invoke-WebRequest `
+            -Uri "https://github.com/Tracktion/pluginval/releases/download/$env:PLUGINVAL_VERSION/pluginval_Windows.zip" `
+            -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $target -Force
+
+          $pluginval = Get-ChildItem -Path $target -Recurse -File -Filter "pluginval.exe" |
+            Select-Object -First 1
+          if (-not $pluginval) {
+            throw "pluginval.exe was not found."
+          }
+
+          "PLUGINVAL=$($pluginval.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Package and validate Windows artifacts
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -220,6 +264,11 @@ jobs:
 
           Get-ChildItem -Path $packageRoot -Recurse -File -Filter "moduleinfo.json" |
             Remove-Item -Force
+
+          & $env:PLUGINVAL --strictness-level $env:PLUGINVAL_STRICTNESS "$packageRoot\$($vst3.Name)"
+          if ($LASTEXITCODE -ne 0) {
+            throw "pluginval failed for $($vst3.Name)."
+          }
 
           $readme = @'
           Funky Moose Mix Analyzer - Windows Build
@@ -316,6 +365,7 @@ jobs:
           - Full-pass Worst-Case-Holds für belastbare Urteile
           - Low-End/Mono/Phase-, Reference- und A/B-Checks
           - Copy Report mit Mix Doctor Summary für DAW-Notizen
+          - pluginval-Validierung mit Strictness Level 5 vor dem Release
 
           Hinweis:
           Die macOS-Builds sind ad-hoc signiert, aber nicht Apple-notarisiert.
@@ -335,6 +385,7 @@ jobs:
           - Full-pass worst-case holds for reliable decisions
           - Low-end/mono/phase, reference, and A/B checks
           - Copy report with Mix Doctor Summary for DAW notes
+          - pluginval validation at strictness level 5 before release
 
           Note:
           The macOS builds are ad-hoc signed, but not Apple-notarized.

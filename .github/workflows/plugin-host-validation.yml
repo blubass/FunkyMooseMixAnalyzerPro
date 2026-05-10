@@ -1,0 +1,160 @@
+name: Plugin Host Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - "plugin/**"
+      - ".github/workflows/plugin-host-validation.yml"
+  pull_request:
+    paths:
+      - "plugin/**"
+      - ".github/workflows/plugin-host-validation.yml"
+
+permissions:
+  contents: read
+
+env:
+  PRODUCT_NAME: "Funky Moose Mix Analyzer"
+  PLUGINVAL_VERSION: "v1.0.4"
+  PLUGINVAL_STRICTNESS: "5"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  validate-macos:
+    name: pluginval macOS VST3 and AU
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout JUCE
+        run: |
+          git clone --depth 1 https://github.com/juce-framework/JUCE.git "$RUNNER_TEMP/JUCE"
+
+      - name: Configure
+        run: |
+          cmake -S plugin -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMIX_ANALYZER_JUCE_DIR="$RUNNER_TEMP/JUCE"
+
+      - name: Build plugin
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Run analysis tests
+        run: |
+          ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Install pluginval
+        run: |
+          set -euo pipefail
+
+          curl -fsSL \
+            -o "$RUNNER_TEMP/pluginval_macOS.zip" \
+            "https://github.com/Tracktion/pluginval/releases/download/${PLUGINVAL_VERSION}/pluginval_macOS.zip"
+          unzip -q "$RUNNER_TEMP/pluginval_macOS.zip" -d "$RUNNER_TEMP/pluginval"
+          xattr -dr com.apple.quarantine "$RUNNER_TEMP/pluginval" || true
+
+          pluginval="$(find "$RUNNER_TEMP/pluginval" -type f -path "*/pluginval.app/Contents/MacOS/pluginval" -print -quit)"
+          if [[ -z "$pluginval" ]]; then
+            echo "::error::pluginval executable was not found."
+            exit 1
+          fi
+
+          chmod +x "$pluginval"
+          echo "PLUGINVAL=$pluginval" >> "$GITHUB_ENV"
+
+      - name: Validate macOS plugin formats
+        run: |
+          set -euo pipefail
+
+          vst3="build/FunkyMooseMixAnalyzer_artefacts/VST3/${PRODUCT_NAME}.vst3"
+          component="build/FunkyMooseMixAnalyzer_artefacts/AU/${PRODUCT_NAME}.component"
+
+          for bundle in "$vst3" "$component"; do
+            if [[ ! -d "$bundle" ]]; then
+              echo "::error::Missing plugin bundle: $bundle"
+              exit 1
+            fi
+
+            find "$bundle" -type f -name "moduleinfo.json" -delete
+            codesign --force --deep --sign - "$bundle"
+            codesign --verify --deep "$bundle"
+            "$PLUGINVAL" --strictness-level "$PLUGINVAL_STRICTNESS" "$bundle"
+          done
+
+  validate-windows:
+    name: pluginval Windows VST3
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout JUCE
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/juce-framework/JUCE.git "$env:RUNNER_TEMP\JUCE"
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S plugin -B build `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DMIX_ANALYZER_JUCE_DIR="$env:RUNNER_TEMP\JUCE"
+
+      - name: Build plugin
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Run analysis tests
+        shell: pwsh
+        run: |
+          ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Install pluginval
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $zip = "$env:RUNNER_TEMP\pluginval_Windows.zip"
+          $target = "$env:RUNNER_TEMP\pluginval"
+          Invoke-WebRequest `
+            -Uri "https://github.com/Tracktion/pluginval/releases/download/$env:PLUGINVAL_VERSION/pluginval_Windows.zip" `
+            -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $target -Force
+
+          $pluginval = Get-ChildItem -Path $target -Recurse -File -Filter "pluginval.exe" |
+            Select-Object -First 1
+          if (-not $pluginval) {
+            throw "pluginval.exe was not found."
+          }
+
+          "PLUGINVAL=$($pluginval.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Validate Windows VST3
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $vst3 = Get-ChildItem -Path build/FunkyMooseMixAnalyzer_artefacts -Recurse -Directory -Filter "*.vst3" |
+            Select-Object -First 1
+          if (-not $vst3) {
+            throw "Missing Windows VST3 bundle."
+          }
+
+          Get-ChildItem -Path $vst3.FullName -Recurse -File -Filter "moduleinfo.json" |
+            Remove-Item -Force
+
+          & $env:PLUGINVAL --strictness-level $env:PLUGINVAL_STRICTNESS $vst3.FullName
+          if ($LASTEXITCODE -ne 0) {
+            throw "pluginval failed for $($vst3.FullName)."
+          }

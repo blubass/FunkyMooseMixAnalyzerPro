@@ -12,6 +12,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build-windows:
     name: Build VST3 and Standalone on Windows
@@ -39,6 +42,11 @@ jobs:
         shell: pwsh
         run: |
           cmake --build build --config Release --parallel
+
+      - name: Run analysis tests
+        shell: pwsh
+        run: |
+          ctest --test-dir build --build-config Release --output-on-failure
 
       - name: Collect artifacts
         shell: pwsh

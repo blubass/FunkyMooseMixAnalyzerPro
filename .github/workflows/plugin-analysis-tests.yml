@@ -1,0 +1,61 @@
+name: Plugin Analysis Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - "plugin/CMakeLists.txt"
+      - "plugin/Source/AnalysisModel.*"
+      - "plugin/Tests/**"
+      - ".github/workflows/plugin-analysis-tests.yml"
+  pull_request:
+    paths:
+      - "plugin/CMakeLists.txt"
+      - "plugin/Source/AnalysisModel.*"
+      - "plugin/Tests/**"
+      - ".github/workflows/plugin-analysis-tests.yml"
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  analysis-tests:
+    name: Analysis CTest on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout JUCE
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/juce-framework/JUCE.git "$RUNNER_TEMP/JUCE"
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S plugin -B build \
+            -DMIX_ANALYZER_JUCE_DIR="$RUNNER_TEMP/JUCE"
+
+      - name: Build analysis tests
+        shell: bash
+        run: |
+          cmake --build build --config Release --target FunkyMooseMixAnalyzerTests --parallel
+
+      - name: Run analysis tests
+        shell: bash
+        run: |
+          ctest --test-dir build --build-config Release --output-on-failure

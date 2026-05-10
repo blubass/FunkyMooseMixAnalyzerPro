@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+include(CTest)
+
 set(MIX_ANALYZER_JUCE_DIR "$ENV{JUCE_DIR}" CACHE PATH "Path to a local JUCE checkout")
 option(MIX_ANALYZER_COPY_PLUGIN_AFTER_BUILD "Copy built plugins into the user plugin folders" OFF)
 
@@ -61,3 +63,26 @@ target_link_libraries(FunkyMooseMixAnalyzer
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+if(BUILD_TESTING)
+    add_executable(FunkyMooseMixAnalyzerTests
+        Source/AnalysisModel.cpp
+        Tests/AnalysisModelTests.cpp)
+
+    target_include_directories(FunkyMooseMixAnalyzerTests
+        PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/Source")
+
+    target_compile_definitions(FunkyMooseMixAnalyzerTests
+        PRIVATE
+            JUCE_WEB_BROWSER=0
+            JUCE_USE_CURL=0)
+
+    target_link_libraries(FunkyMooseMixAnalyzerTests
+        PRIVATE
+            juce::juce_core
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags)
+
+    add_test(NAME FunkyMooseMixAnalyzerTests COMMAND FunkyMooseMixAnalyzerTests)
+endif()

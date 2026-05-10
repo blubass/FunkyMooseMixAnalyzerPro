@@ -51,6 +51,18 @@ Expected outputs:
 - `plugin/artifacts/Funky Moose Mix Analyzer.component` on macOS
 - `plugin/artifacts/Funky Moose Mix Analyzer.app`
 
+## Analysis regression tests
+
+The mix-judgement model has deterministic CTest coverage for profile sanity,
+warm-up gating, ready full-pass judgement, clipping priority, low-end phase
+blocking, and full-pass worst-case holds:
+
+```bash
+cmake -S plugin -B plugin/build -DMIX_ANALYZER_JUCE_DIR=/Users/uwearthurfelchle/Developer/JUCE
+cmake --build plugin/build --config Release --target FunkyMooseMixAnalyzerTests
+ctest --test-dir plugin/build --build-config Release --output-on-failure
+```
+
 ## Install for Cubase / AU hosts
 
 Cubase scans the standard VST3 folders, not this repository's `plugin/artifacts`

@@ -59,6 +59,52 @@ jobs:
           Get-ChildItem -Path dist -Recurse -File -Filter "moduleinfo.json" |
             Remove-Item -Force
 
+          $readme = @'
+          Funky Moose Mix Analyzer - Windows Build
+          ========================================
+
+          Deutsch
+          -------
+          Inhalt:
+          - Funky Moose Mix Analyzer.vst3
+          - Funky Moose Mix Analyzer.exe
+
+          VST3 Installation:
+          1. Schließe Cubase oder deine DAW.
+          2. Kopiere den kompletten Ordner "Funky Moose Mix Analyzer.vst3" nach:
+             C:\Program Files\Common Files\VST3
+          3. Starte Cubase neu und lasse den Plugin-Scan laufen.
+          4. Suche nach "Funky Moose Mix Analyzer" in den Audio-Effekten.
+
+          Standalone:
+          - Starte "Funky Moose Mix Analyzer.exe" direkt.
+
+          Hinweis:
+          Der VST3-Ordner muss komplett kopiert werden. Nicht nur die einzelne Datei im
+          Unterordner "Contents\x86_64-win" kopieren.
+
+          English
+          -------
+          Contents:
+          - Funky Moose Mix Analyzer.vst3
+          - Funky Moose Mix Analyzer.exe
+
+          VST3 installation:
+          1. Close Cubase or your DAW.
+          2. Copy the complete folder "Funky Moose Mix Analyzer.vst3" to:
+             C:\Program Files\Common Files\VST3
+          3. Restart Cubase and let it rescan plugins.
+          4. Search for "Funky Moose Mix Analyzer" in the audio effects list.
+
+          Standalone:
+          - Run "Funky Moose Mix Analyzer.exe" directly.
+
+          Note:
+          Copy the complete VST3 folder. Do not copy only the single binary inside
+          "Contents\x86_64-win".
+          '@
+          $readme | Set-Content -Path "dist/README_WINDOWS_DE_EN.txt" -Encoding UTF8
+
           if (-not (Get-ChildItem -Path dist -Recurse | Where-Object { -not $_.PSIsContainer })) {
             throw "No Windows plugin artifacts were collected."
           }

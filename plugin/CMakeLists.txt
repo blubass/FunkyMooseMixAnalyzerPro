@@ -85,4 +85,35 @@ if(BUILD_TESTING)
             juce::juce_recommended_warning_flags)
 
     add_test(NAME FunkyMooseMixAnalyzerTests COMMAND FunkyMooseMixAnalyzerTests)
+
+    add_executable(FunkyMooseMixAnalyzerAudioFixtureTests
+        Source/AnalysisModel.cpp
+        Source/PluginProcessor.cpp
+        Tests/AudioFixtureTests.cpp)
+
+    target_include_directories(FunkyMooseMixAnalyzerAudioFixtureTests
+        PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/Source")
+
+    target_compile_definitions(FunkyMooseMixAnalyzerAudioFixtureTests
+        PRIVATE
+            MIX_ANALYZER_HEADLESS_TESTS=1
+            JUCE_WEB_BROWSER=0
+            JUCE_USE_CURL=0
+            JUCE_VST3_CAN_REPLACE_VST2=0)
+
+    target_link_libraries(FunkyMooseMixAnalyzerAudioFixtureTests
+        PRIVATE
+            juce::juce_audio_formats
+            juce::juce_audio_processors
+            juce::juce_dsp
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags)
+
+    add_test(NAME FunkyMooseMixAnalyzerAudioFixtureTests COMMAND FunkyMooseMixAnalyzerAudioFixtureTests)
+
+    add_custom_target(FunkyMooseMixAnalyzerAllTests
+        DEPENDS
+            FunkyMooseMixAnalyzerTests
+            FunkyMooseMixAnalyzerAudioFixtureTests)
 endif()

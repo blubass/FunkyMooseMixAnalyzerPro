@@ -8,12 +8,14 @@ on:
     paths:
       - "plugin/CMakeLists.txt"
       - "plugin/Source/AnalysisModel.*"
+      - "plugin/Source/PluginProcessor.*"
       - "plugin/Tests/**"
       - ".github/workflows/plugin-analysis-tests.yml"
   pull_request:
     paths:
       - "plugin/CMakeLists.txt"
       - "plugin/Source/AnalysisModel.*"
+      - "plugin/Source/PluginProcessor.*"
       - "plugin/Tests/**"
       - ".github/workflows/plugin-analysis-tests.yml"
 
@@ -53,7 +55,7 @@ jobs:
       - name: Build analysis tests
         shell: bash
         run: |
-          cmake --build build --config Release --target FunkyMooseMixAnalyzerTests --parallel
+          cmake --build build --config Release --target FunkyMooseMixAnalyzerAllTests --parallel
 
       - name: Run analysis tests
         shell: bash

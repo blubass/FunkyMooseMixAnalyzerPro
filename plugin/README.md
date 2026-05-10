@@ -55,11 +55,14 @@ Expected outputs:
 
 The mix-judgement model has deterministic CTest coverage for profile sanity,
 warm-up gating, ready full-pass judgement, clipping priority, low-end phase
-blocking, and full-pass worst-case holds:
+blocking, and full-pass worst-case holds. The suite also generates small WAV
+fixtures at runtime and runs them through the real processor path to verify
+sample peak, RMS, crest, LUFS sanity, clipping, phase correlation, mono loss,
+and spectral band routing:
 
 ```bash
 cmake -S plugin -B plugin/build -DMIX_ANALYZER_JUCE_DIR=/Users/uwearthurfelchle/Developer/JUCE
-cmake --build plugin/build --config Release --target FunkyMooseMixAnalyzerTests
+cmake --build plugin/build --config Release --target FunkyMooseMixAnalyzerAllTests
 ctest --test-dir plugin/build --build-config Release --output-on-failure
 ```
 

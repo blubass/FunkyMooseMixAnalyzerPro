@@ -1,5 +1,7 @@
 #include "PluginProcessor.h"
+#ifndef MIX_ANALYZER_HEADLESS_TESTS
 #include "PluginEditor.h"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -1346,7 +1348,11 @@ void FunkyMooseMixAnalyzerAudioProcessor::setStateInformation(const void* data, 
 
 juce::AudioProcessorEditor* FunkyMooseMixAnalyzerAudioProcessor::createEditor()
 {
+#ifdef MIX_ANALYZER_HEADLESS_TESTS
+    return nullptr;
+#else
     return new FunkyMooseMixAnalyzerAudioProcessorEditor(*this);
+#endif
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

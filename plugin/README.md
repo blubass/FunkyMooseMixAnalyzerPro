@@ -69,11 +69,20 @@ ctest --test-dir plugin/build --build-config Release --output-on-failure
 ## Host validation
 
 Release builds run Tracktion pluginval at strictness level 5 before packaging.
-Locally, download pluginval from the Tracktion/pluginval release page and run:
+Locally, download pluginval from the Tracktion/pluginval release page. VST3 can
+be validated directly:
 
 ```bash
 pluginval --strictness-level 5 "plugin/artifacts/Funky Moose Mix Analyzer.vst3"
-pluginval --strictness-level 5 "plugin/artifacts/Funky Moose Mix Analyzer.component"
+```
+
+AU validation has to go through macOS AudioComponent registration:
+
+```bash
+bash plugin/install_macos.sh --user
+killall AudioComponentRegistrar || true
+auval -v aufx FmMa Fnky
+pluginval --strictness-level 5 "$HOME/Library/Audio/Plug-Ins/Components/Funky Moose Mix Analyzer.component"
 ```
 
 ## Install for Cubase / AU hosts

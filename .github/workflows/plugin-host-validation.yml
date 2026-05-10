@@ -112,8 +112,22 @@ jobs:
             find "$bundle" -type f -name "moduleinfo.json" -delete
             codesign --force --deep --sign - "$bundle"
             codesign --verify --deep "$bundle"
-            run_pluginval_checked "$bundle"
           done
+
+          run_pluginval_checked "$vst3"
+
+          au_component_dir="$HOME/Library/Audio/Plug-Ins/Components"
+          installed_component="$au_component_dir/${PRODUCT_NAME}.component"
+          mkdir -p "$au_component_dir"
+          rm -rf "$installed_component"
+          ditto "$component" "$installed_component"
+          codesign --force --deep --sign - "$installed_component"
+          codesign --verify --deep "$installed_component"
+          killall AudioComponentRegistrar || true
+          sleep 2
+
+          auval -v aufx FmMa Fnky
+          run_pluginval_checked "$installed_component"
 
   validate-windows:
     name: pluginval Windows VST3

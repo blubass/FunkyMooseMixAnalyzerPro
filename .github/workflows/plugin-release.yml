@@ -132,7 +132,19 @@ jobs:
           done
 
           run_pluginval_checked "$package_root/${PRODUCT_NAME}.vst3"
-          run_pluginval_checked "$package_root/${PRODUCT_NAME}.component"
+
+          au_component_dir="$HOME/Library/Audio/Plug-Ins/Components"
+          installed_component="$au_component_dir/${PRODUCT_NAME}.component"
+          mkdir -p "$au_component_dir"
+          rm -rf "$installed_component"
+          ditto "$package_root/${PRODUCT_NAME}.component" "$installed_component"
+          codesign --force --deep --sign - "$installed_component"
+          codesign --verify --deep "$installed_component"
+          killall AudioComponentRegistrar || true
+          sleep 2
+
+          auval -v aufx FmMa Fnky
+          run_pluginval_checked "$installed_component"
 
           cat > "$package_root/README_MACOS_DE_EN.txt" <<'README'
           Funky Moose Mix Analyzer - macOS Build

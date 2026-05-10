@@ -86,6 +86,27 @@ auval -v aufx FmMa Fnky
 pluginval --strictness-level 5 "$HOME/Library/Audio/Plug-Ins/Components/Funky Moose Mix Analyzer.component"
 ```
 
+## macOS release signing and notarization
+
+The release workflow signs macOS bundles before packaging. Without Apple
+credentials it falls back to ad-hoc signing, so test releases still work.
+
+For Developer ID signing and Apple notarization, add these GitHub repository
+secrets:
+
+- `MACOS_DEVELOPER_ID_CERTIFICATE_BASE64`: base64-encoded `.p12` export of the
+  Developer ID Application certificate and private key
+- `MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD`: password for that `.p12`
+- `APPLE_ID`: Apple developer account email used for notarization
+- `APPLE_TEAM_ID`: Apple developer team ID
+- `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for the Apple ID
+
+The workflow also accepts `APPLE_DEVELOPER_ID_CERTIFICATE_BASE64` and
+`APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD` as legacy aliases. When all secrets are
+present, the macOS ZIP is submitted with `xcrun notarytool`, the standalone app
+is stapled, VST3/AU stapling is attempted, and the final ZIP is recreated with
+the stapled bundles.
+
 ## Install for Cubase / AU hosts
 
 Cubase scans the standard VST3 folders, not this repository's `plugin/artifacts`
@@ -104,4 +125,5 @@ sudo bash plugin/install_macos.sh --system --reset-cubase-cache
 
 ## Next plugin steps
 
-- Add signed/notarized macOS release packaging for smoother first launch.
+- Add optional Windows Authenticode signing when a Windows code-signing certificate is available.
+- Add a desktop-app import screen for the plugin JSON report.

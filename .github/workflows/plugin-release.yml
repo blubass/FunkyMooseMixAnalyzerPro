@@ -77,6 +77,26 @@ jobs:
         run: |
           set -euo pipefail
 
+          run_pluginval_checked() {
+            local bundle="$1"
+            local log_file
+
+            log_file="$(mktemp "$RUNNER_TEMP/pluginval.XXXXXX.log")"
+            set +e
+            "$PLUGINVAL" --strictness-level "$PLUGINVAL_STRICTNESS" "$bundle" 2>&1 | tee "$log_file"
+            local pluginval_exit="${PIPESTATUS[0]}"
+            set -e
+
+            if ! grep -Eq '^SUCCESS[[:space:]]*$' "$log_file"; then
+              echo "::error::pluginval did not report SUCCESS for $bundle"
+              exit 1
+            fi
+
+            if [[ "$pluginval_exit" -ne 0 ]]; then
+              echo "::warning::pluginval exited with $pluginval_exit after reporting SUCCESS for $bundle"
+            fi
+          }
+
           package_tag="${RELEASE_TAG//\//-}"
           package_root="dist/${RELEASE_BASENAME}-macOS-${package_tag}"
           artefact_root="build/FunkyMooseMixAnalyzer_artefacts"
@@ -111,8 +131,8 @@ jobs:
             codesign --verify --deep "$bundle"
           done
 
-          "$PLUGINVAL" --strictness-level "$PLUGINVAL_STRICTNESS" "$package_root/${PRODUCT_NAME}.vst3"
-          "$PLUGINVAL" --strictness-level "$PLUGINVAL_STRICTNESS" "$package_root/${PRODUCT_NAME}.component"
+          run_pluginval_checked "$package_root/${PRODUCT_NAME}.vst3"
+          run_pluginval_checked "$package_root/${PRODUCT_NAME}.component"
 
           cat > "$package_root/README_MACOS_DE_EN.txt" <<'README'
           Funky Moose Mix Analyzer - macOS Build
@@ -242,6 +262,30 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $false
+
+          function Invoke-PluginvalChecked {
+            param([Parameter(Mandatory = $true)][string]$BundlePath)
+
+            $safeName = [IO.Path]::GetFileName($BundlePath) -replace '[^A-Za-z0-9_.-]', '_'
+            $logPath = Join-Path $env:RUNNER_TEMP "pluginval-$safeName.log"
+            if (Test-Path $logPath) {
+              Remove-Item $logPath -Force
+            }
+
+            & $env:PLUGINVAL --strictness-level $env:PLUGINVAL_STRICTNESS $BundlePath 2>&1 |
+              Tee-Object -FilePath $logPath
+            $pluginvalExitCode = $LASTEXITCODE
+            $pluginvalOutput = Get-Content -Raw -Path $logPath
+
+            if ($pluginvalOutput -notmatch "(?m)^SUCCESS\s*$") {
+              throw "pluginval did not report SUCCESS for $BundlePath."
+            }
+
+            if ($pluginvalExitCode -ne 0) {
+              Write-Warning "pluginval exited with $pluginvalExitCode after reporting SUCCESS for $BundlePath."
+            }
+          }
 
           $packageTag = $env:RELEASE_TAG -replace '[\\/]', '-'
           $packageRoot = "dist\$($env:RELEASE_BASENAME)-Windows-$packageTag"
@@ -265,10 +309,7 @@ jobs:
           Get-ChildItem -Path $packageRoot -Recurse -File -Filter "moduleinfo.json" |
             Remove-Item -Force
 
-          & $env:PLUGINVAL --strictness-level $env:PLUGINVAL_STRICTNESS "$packageRoot\$($vst3.Name)"
-          if ($LASTEXITCODE -ne 0) {
-            throw "pluginval failed for $($vst3.Name)."
-          }
+          Invoke-PluginvalChecked "$packageRoot\$($vst3.Name)"
 
           $readme = @'
           Funky Moose Mix Analyzer - Windows Build

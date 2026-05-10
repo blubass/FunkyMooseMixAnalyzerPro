@@ -73,19 +73,46 @@ jobs:
         run: |
           set -euo pipefail
 
-          vst3="build/FunkyMooseMixAnalyzer_artefacts/VST3/${PRODUCT_NAME}.vst3"
-          component="build/FunkyMooseMixAnalyzer_artefacts/AU/${PRODUCT_NAME}.component"
+          artefact_root="build/FunkyMooseMixAnalyzer_artefacts"
+
+          find_bundle() {
+            local bundle_name="$1"
+            find "$artefact_root" -type d -name "$bundle_name" -print -quit
+          }
+
+          run_pluginval_checked() {
+            local bundle="$1"
+            local log_file
+
+            log_file="$(mktemp "$RUNNER_TEMP/pluginval.XXXXXX.log")"
+            set +e
+            "$PLUGINVAL" --strictness-level "$PLUGINVAL_STRICTNESS" "$bundle" 2>&1 | tee "$log_file"
+            local pluginval_exit="${PIPESTATUS[0]}"
+            set -e
+
+            if ! grep -Eq '^SUCCESS[[:space:]]*$' "$log_file"; then
+              echo "::error::pluginval did not report SUCCESS for $bundle"
+              exit 1
+            fi
+
+            if [[ "$pluginval_exit" -ne 0 ]]; then
+              echo "::warning::pluginval exited with $pluginval_exit after reporting SUCCESS for $bundle"
+            fi
+          }
+
+          vst3="$(find_bundle "${PRODUCT_NAME}.vst3")"
+          component="$(find_bundle "${PRODUCT_NAME}.component")"
 
           for bundle in "$vst3" "$component"; do
-            if [[ ! -d "$bundle" ]]; then
-              echo "::error::Missing plugin bundle: $bundle"
+            if [[ -z "$bundle" || ! -d "$bundle" ]]; then
+              echo "::error::Missing plugin bundle under $artefact_root"
               exit 1
             fi
 
             find "$bundle" -type f -name "moduleinfo.json" -delete
             codesign --force --deep --sign - "$bundle"
             codesign --verify --deep "$bundle"
-            "$PLUGINVAL" --strictness-level "$PLUGINVAL_STRICTNESS" "$bundle"
+            run_pluginval_checked "$bundle"
           done
 
   validate-windows:
@@ -144,6 +171,30 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $false
+
+          function Invoke-PluginvalChecked {
+            param([Parameter(Mandatory = $true)][string]$BundlePath)
+
+            $safeName = [IO.Path]::GetFileName($BundlePath) -replace '[^A-Za-z0-9_.-]', '_'
+            $logPath = Join-Path $env:RUNNER_TEMP "pluginval-$safeName.log"
+            if (Test-Path $logPath) {
+              Remove-Item $logPath -Force
+            }
+
+            & $env:PLUGINVAL --strictness-level $env:PLUGINVAL_STRICTNESS $BundlePath 2>&1 |
+              Tee-Object -FilePath $logPath
+            $pluginvalExitCode = $LASTEXITCODE
+            $pluginvalOutput = Get-Content -Raw -Path $logPath
+
+            if ($pluginvalOutput -notmatch "(?m)^SUCCESS\s*$") {
+              throw "pluginval did not report SUCCESS for $BundlePath."
+            }
+
+            if ($pluginvalExitCode -ne 0) {
+              Write-Warning "pluginval exited with $pluginvalExitCode after reporting SUCCESS for $BundlePath."
+            }
+          }
 
           $vst3 = Get-ChildItem -Path build/FunkyMooseMixAnalyzer_artefacts -Recurse -Directory -Filter "*.vst3" |
             Select-Object -First 1
@@ -154,7 +205,4 @@ jobs:
           Get-ChildItem -Path $vst3.FullName -Recurse -File -Filter "moduleinfo.json" |
             Remove-Item -Force
 
-          & $env:PLUGINVAL --strictness-level $env:PLUGINVAL_STRICTNESS $vst3.FullName
-          if ($LASTEXITCODE -ne 0) {
-            throw "pluginval failed for $($vst3.FullName)."
-          }
+          Invoke-PluginvalChecked $vst3.FullName

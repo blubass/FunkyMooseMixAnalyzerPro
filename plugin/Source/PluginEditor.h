@@ -28,6 +28,9 @@ private:
     void drawSnapshotCompare(juce::Graphics& g, juce::Rectangle<float> area);
     void drawPriorityActions(juce::Graphics& g, juce::Rectangle<float> area);
     void copyReportToClipboard();
+    void copyJsonReportToClipboard();
+    juce::String buildTextReport() const;
+    juce::String buildJsonReport() const;
     juce::String formatDuration(float seconds) const;
     juce::String formatSigned(float value, const juce::String& suffix, int decimals = 1) const;
     juce::String formatDeliveryPreview(float targetLufs) const;
@@ -71,6 +74,7 @@ private:
     juce::TextButton clearSnapshotsButton;
     juce::TextButton resetButton;
     juce::TextButton copyButton;
+    juce::TextButton copyJsonButton;
     std::unique_ptr<ComboAttachment> genreAttachment;
     std::unique_ptr<ButtonAttachment> instrumentalAttachment;
 

@@ -21,6 +21,7 @@ This is the first native plugin companion for Funky Moose Mix Analyzer. It is a 
 - Tone scoring distinguishes air, dullness, harsh presence, sibilance-zone resonance, and vocal presence masking.
 - Reference comparison contributes its own action note when the current mix drifts meaningfully from the captured reference.
 - Copy report now includes a Mix Doctor Summary, worst-case holds, delivery preview, reference/A-B notes, and band-phase readouts.
+- Copy JSON exports the same pass as a stable machine-readable report for desktop-app import, support notes, or session archiving.
 - The top measured priority actions are severity-ranked and include measured values where useful, so hard blockers such as clipping, True Peak, mono loss, phase, translation, and confidence issues surface before polish moves.
 - Captured references and A/B snapshots are stored in the plugin state so DAW projects can restore them with the session.
 
@@ -103,5 +104,4 @@ sudo bash plugin/install_macos.sh --system --reset-cubase-cache
 
 ## Next plugin steps
 
-- Add a deeper report/export bridge between the plugin and the desktop app.
 - Add signed/notarized macOS release packaging for smoother first launch.

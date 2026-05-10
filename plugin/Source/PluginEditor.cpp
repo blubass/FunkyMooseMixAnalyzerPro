@@ -72,6 +72,22 @@ float lowEndSideDbOf(const fmma::AnalyzerMetrics& source) noexcept
     return juce::jmax(source.bandSideRatiosDb[0], source.bandSideRatiosDb[1]);
 }
 
+juce::var jsonNumber(float value)
+{
+    return std::isfinite(value) ? juce::var(static_cast<double>(value)) : juce::var();
+}
+
+juce::var jsonAudioNumber(float value)
+{
+    return (std::isfinite(value) && value > -119.0f) ? juce::var(static_cast<double>(value)) : juce::var();
+}
+
+void setJsonProperty(juce::var& object, const char* name, const juce::var& value)
+{
+    if (auto* dynamicObject = object.getDynamicObject())
+        dynamicObject->setProperty(juce::Identifier(name), value);
+}
+
 float frequencyToUnit(float frequencyHz) noexcept
 {
     if (! std::isfinite(frequencyHz) || frequencyHz <= 0.0f)
@@ -204,9 +220,13 @@ FunkyMooseMixAnalyzerAudioProcessorEditor::FunkyMooseMixAnalyzerAudioProcessorEd
     };
     addAndMakeVisible(resetButton);
 
-    copyButton.setButtonText("Copy");
+    copyButton.setButtonText("Copy TXT");
     copyButton.onClick = [this] { copyReportToClipboard(); };
     addAndMakeVisible(copyButton);
+
+    copyJsonButton.setButtonText("Copy JSON");
+    copyJsonButton.onClick = [this] { copyJsonReportToClipboard(); };
+    addAndMakeVisible(copyJsonButton);
 
     genreAttachment = std::make_unique<ComboAttachment>(audioProcessor.parameters, "genre", genreBox);
     instrumentalAttachment = std::make_unique<ButtonAttachment>(audioProcessor.parameters, "instrumental", instrumentalToggle);
@@ -671,27 +691,29 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::paint(juce::Graphics& g)
 void FunkyMooseMixAnalyzerAudioProcessorEditor::resized()
 {
     auto header = getLocalBounds().reduced(24).removeFromTop(34);
-    auto controls = header.removeFromRight(1030);
-    genreLabel.setBounds(controls.removeFromLeft(86));
-    genreBox.setBounds(controls.removeFromLeft(180).reduced(0, 1));
+    auto controls = header.removeFromRight(1080);
+    genreLabel.setBounds(controls.removeFromLeft(80));
+    genreBox.setBounds(controls.removeFromLeft(170).reduced(0, 1));
     controls.removeFromLeft(7);
-    instrumentalToggle.setBounds(controls.removeFromLeft(104));
+    instrumentalToggle.setBounds(controls.removeFromLeft(96));
     controls.removeFromLeft(7);
-    passButton.setBounds(controls.removeFromLeft(94).reduced(0, 1));
+    passButton.setBounds(controls.removeFromLeft(88).reduced(0, 1));
     controls.removeFromLeft(7);
-    referenceButton.setBounds(controls.removeFromLeft(98).reduced(0, 1));
+    referenceButton.setBounds(controls.removeFromLeft(92).reduced(0, 1));
     controls.removeFromLeft(7);
-    clearReferenceButton.setBounds(controls.removeFromLeft(72).reduced(0, 1));
+    clearReferenceButton.setBounds(controls.removeFromLeft(62).reduced(0, 1));
     controls.removeFromLeft(7);
-    snapshotAButton.setBounds(controls.removeFromLeft(62).reduced(0, 1));
+    snapshotAButton.setBounds(controls.removeFromLeft(56).reduced(0, 1));
     controls.removeFromLeft(7);
-    snapshotBButton.setBounds(controls.removeFromLeft(62).reduced(0, 1));
+    snapshotBButton.setBounds(controls.removeFromLeft(56).reduced(0, 1));
     controls.removeFromLeft(7);
-    clearSnapshotsButton.setBounds(controls.removeFromLeft(74).reduced(0, 1));
+    clearSnapshotsButton.setBounds(controls.removeFromLeft(66).reduced(0, 1));
     controls.removeFromLeft(7);
-    resetButton.setBounds(controls.removeFromLeft(58).reduced(0, 1));
+    resetButton.setBounds(controls.removeFromLeft(54).reduced(0, 1));
     controls.removeFromLeft(7);
-    copyButton.setBounds(controls.removeFromLeft(58).reduced(0, 1));
+    copyButton.setBounds(controls.removeFromLeft(72).reduced(0, 1));
+    controls.removeFromLeft(7);
+    copyJsonButton.setBounds(controls.removeFromLeft(82).reduced(0, 1));
 }
 
 void FunkyMooseMixAnalyzerAudioProcessorEditor::drawSummary(juce::Graphics& g,
@@ -1059,6 +1081,16 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::drawPriorityActions(juce::Graphi
 
 void FunkyMooseMixAnalyzerAudioProcessorEditor::copyReportToClipboard()
 {
+    juce::SystemClipboard::copyTextToClipboard(buildTextReport());
+}
+
+void FunkyMooseMixAnalyzerAudioProcessorEditor::copyJsonReportToClipboard()
+{
+    juce::SystemClipboard::copyTextToClipboard(buildJsonReport());
+}
+
+juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport() const
+{
     const auto& profile = fmma::getGenreProfile(genreBox.getSelectedItemIndex());
     const auto input = makeAssessmentInput();
     const auto truePeakForReport = metrics.fullPassCompleted ? juce::jmax(metrics.truePeakDb, metrics.worstTruePeakDb)
@@ -1201,5 +1233,213 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::copyReportToClipboard()
     if (referenceActionNote().isNotEmpty())
         report << "R. " << referenceActionNote() << "\n";
 
-    juce::SystemClipboard::copyTextToClipboard(report);
+    return report;
+}
+
+juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport() const
+{
+    const auto& profile = fmma::getGenreProfile(genreBox.getSelectedItemIndex());
+    const auto input = makeAssessmentInput();
+    const auto truePeakForReport = metrics.fullPassCompleted ? juce::jmax(metrics.truePeakDb, metrics.worstTruePeakDb)
+                                                             : metrics.truePeakDb;
+
+    auto makeRange = [] (const fmma::Range& range)
+    {
+        juce::var object { new juce::DynamicObject() };
+        setJsonProperty(object, "low", jsonNumber(range.low));
+        setJsonProperty(object, "high", jsonNumber(range.high));
+        return object;
+    };
+
+    auto makeMetricSummary = [] (const fmma::AnalyzerMetrics& source)
+    {
+        juce::var object { new juce::DynamicObject() };
+        setJsonProperty(object, "analysisSeconds", jsonNumber(source.fullPassSeconds > 0.0f ? source.fullPassSeconds
+                                                                                            : source.analysisSeconds));
+        setJsonProperty(object, "integratedLufs", jsonAudioNumber(source.integratedLufs));
+        setJsonProperty(object, "truePeakDbTp", jsonAudioNumber(source.truePeakDb));
+        setJsonProperty(object, "crestDb", jsonNumber(source.crestDb));
+        setJsonProperty(object, "lowEndPercent", jsonNumber(lowEndOf(source)));
+        setJsonProperty(object, "presencePercent", jsonNumber(presenceOf(source)));
+        setJsonProperty(object, "widthPercent", jsonNumber(source.widthPct));
+        setJsonProperty(object, "correlation", jsonNumber(source.correlation));
+        return object;
+    };
+
+    auto root = juce::var { new juce::DynamicObject() };
+    setJsonProperty(root, "schema", "funky-moose.mix-analyzer.report");
+    setJsonProperty(root, "schemaVersion", 1);
+    setJsonProperty(root, "source", "Funky Moose Mix Analyzer Plugin");
+    setJsonProperty(root, "generatedAt", juce::Time::getCurrentTime().toISO8601(true));
+    setJsonProperty(root, "mode", input.instrumental ? "instrumental" : "vocal-full-mix");
+    setJsonProperty(root, "analysisScope", metrics.hostAutoPassActive ? "host-recording" : assessment.analysisScope);
+    setJsonProperty(root, "analysisSeconds", jsonNumber(metrics.fullPassCompleted ? metrics.fullPassSeconds
+                                                                                  : metrics.analysisSeconds));
+
+    auto profileJson = juce::var { new juce::DynamicObject() };
+    setJsonProperty(profileJson, "name", profile.name);
+    setJsonProperty(profileJson, "group", profile.group);
+    setJsonProperty(profileJson, "targetLufs", jsonNumber(profile.targetLufs));
+    setJsonProperty(profileJson, "lufsRange", makeRange(profile.lufsRange));
+    setJsonProperty(profileJson, "crestRange", makeRange(profile.crestRange));
+    setJsonProperty(profileJson, "lowEndRange", makeRange(profile.lowEndRange));
+    setJsonProperty(profileJson, "presenceMax", jsonNumber(profile.presenceMax));
+    setJsonProperty(profileJson, "correlationMin", jsonNumber(profile.correlationMin));
+    setJsonProperty(profileJson, "wideExpected", profile.wideExpected);
+    setJsonProperty(root, "genreProfile", profileJson);
+
+    auto scores = juce::var { new juce::DynamicObject() };
+    setJsonProperty(scores, "overall", assessment.overallScore);
+    setJsonProperty(scores, "confidence", assessment.confidenceScore);
+    setJsonProperty(scores, "lufs", assessment.lufsScore);
+    setJsonProperty(scores, "correlation", assessment.correlationScore);
+    setJsonProperty(scores, "lowEnd", assessment.lowEndScore);
+    setJsonProperty(scores, "crest", assessment.crestScore);
+    setJsonProperty(scores, "clipping", assessment.clippingScore);
+    setJsonProperty(scores, "headphone", assessment.headphoneScore);
+    setJsonProperty(scores, "speaker", assessment.speakerScore);
+    setJsonProperty(scores, "lra", assessment.lraScore);
+    setJsonProperty(scores, "transient", assessment.transientScore);
+    setJsonProperty(scores, "tone", assessment.toneScore);
+    setJsonProperty(root, "scores", scores);
+
+    auto assessmentJson = juce::var { new juce::DynamicObject() };
+    setJsonProperty(assessmentJson, "verdictKey", assessment.verdictKey);
+    setJsonProperty(assessmentJson, "verdictTitle", assessment.verdictTitle);
+    setJsonProperty(assessmentJson, "statusLine", assessment.statusLine);
+    setJsonProperty(assessmentJson, "confidenceLabel", assessment.confidenceLabel);
+    setJsonProperty(assessmentJson, "confidenceText", assessment.confidenceText);
+    setJsonProperty(assessmentJson, "measurementReady", assessment.measurementReady);
+    setJsonProperty(assessmentJson, "summary", mixDoctorSummary());
+
+    juce::Array<juce::var> actions;
+    for (auto i = 0; i < assessment.priorityActionCount; ++i)
+        actions.add(assessment.priorityActions[static_cast<size_t>(i)]);
+    if (referenceActionNote().isNotEmpty())
+        actions.add(referenceActionNote());
+    setJsonProperty(assessmentJson, "priorityActions", actions);
+    setJsonProperty(root, "assessment", assessmentJson);
+
+    auto measurements = juce::var { new juce::DynamicObject() };
+    setJsonProperty(measurements, "momentaryLufs", jsonAudioNumber(metrics.momentaryLufs));
+    setJsonProperty(measurements, "shortTermLufs", jsonAudioNumber(metrics.shortTermLufs));
+    setJsonProperty(measurements, "integratedLufs", jsonAudioNumber(metrics.integratedLufs));
+    setJsonProperty(measurements, "truePeakDbTp", jsonAudioNumber(metrics.truePeakDb));
+    setJsonProperty(measurements, "rmsDb", jsonAudioNumber(metrics.rmsDb));
+    setJsonProperty(measurements, "samplePeakDb", jsonAudioNumber(metrics.peakDb));
+    setJsonProperty(measurements, "crestDb", jsonNumber(metrics.crestDb));
+    setJsonProperty(measurements, "lraLu", jsonNumber(metrics.lraLu));
+    setJsonProperty(measurements, "correlation", jsonNumber(metrics.correlation));
+    setJsonProperty(measurements, "widthPercent", jsonNumber(metrics.widthPct));
+    setJsonProperty(measurements, "msRatioDb", jsonNumber(metrics.msRatioDb));
+    setJsonProperty(measurements, "stereoBalanceDb", jsonNumber(metrics.stereoBalanceDb));
+    setJsonProperty(measurements, "monoRmsDb", jsonAudioNumber(metrics.monoRmsDb));
+    setJsonProperty(measurements, "monoLossDb", jsonNumber(metrics.monoLossDb));
+    setJsonProperty(measurements, "dcOffset", jsonNumber(metrics.dcOffset));
+    setJsonProperty(measurements, "clippedPercent", jsonNumber(metrics.clippedPercent));
+    setJsonProperty(measurements, "silencePercent", jsonNumber(metrics.silencePercent));
+    setJsonProperty(measurements, "transientDensityPerSecond", jsonNumber(metrics.transientDensity));
+    setJsonProperty(measurements, "attackTimeMs", jsonNumber(metrics.attackTimeMs));
+    setJsonProperty(measurements, "percussionEnergyPercent", jsonNumber(metrics.percussionEnergyPct));
+    setJsonProperty(measurements, "spectralCentroidHz", jsonNumber(metrics.spectralCentroidHz));
+    setJsonProperty(measurements, "spectralRolloffHz", jsonNumber(metrics.spectralRolloffHz));
+    setJsonProperty(measurements, "resonanceFreqHz", jsonNumber(metrics.resonanceFreqHz));
+    setJsonProperty(measurements, "resonanceGainDb", jsonNumber(metrics.resonanceGainDb));
+    setJsonProperty(measurements, "lowEndPercent", jsonNumber(input.lowEndPercent));
+    setJsonProperty(measurements, "presencePercent", jsonNumber(input.presencePercent));
+    setJsonProperty(measurements, "lowEndCorrelation", jsonNumber(input.lowEndCorrelation));
+    setJsonProperty(measurements, "lowEndSideDb", jsonAudioNumber(input.lowEndSideDb));
+
+    juce::Array<juce::var> bands;
+    for (auto i = 0; i < fmma::bandCount; ++i)
+    {
+        const auto index = static_cast<size_t>(i);
+        juce::var band { new juce::DynamicObject() };
+        setJsonProperty(band, "name", bandNames[index]);
+        setJsonProperty(band, "percent", jsonNumber(metrics.bandPercents[index]));
+        setJsonProperty(band, "correlation", jsonNumber(metrics.bandCorrelations[index]));
+        setJsonProperty(band, "sideRatioDb", jsonAudioNumber(metrics.bandSideRatiosDb[index]));
+        bands.add(band);
+    }
+    setJsonProperty(measurements, "bands", bands);
+    setJsonProperty(root, "measurements", measurements);
+
+    auto worstCase = juce::var { new juce::DynamicObject() };
+    setJsonProperty(worstCase, "truePeakDbTp", jsonAudioNumber(metrics.worstTruePeakDb));
+    setJsonProperty(worstCase, "correlation", jsonNumber(metrics.worstCorrelation));
+    setJsonProperty(worstCase, "monoLossDb", jsonNumber(metrics.worstMonoLossDb));
+    setJsonProperty(worstCase, "clippedPercent", jsonNumber(metrics.worstClippedPercent));
+    setJsonProperty(worstCase, "lowMidPercent", jsonNumber(metrics.worstLowMidPercent));
+    setJsonProperty(worstCase, "resonanceFreqHz", jsonNumber(metrics.worstResonanceFreqHz));
+    setJsonProperty(worstCase, "resonanceGainDb", jsonNumber(metrics.worstResonanceGainDb));
+    setJsonProperty(root, "worstCase", worstCase);
+
+    juce::Array<juce::var> deliveryPreview;
+    auto addDeliveryTarget = [&] (const char* name, float targetLufs)
+    {
+        juce::var target { new juce::DynamicObject() };
+        setJsonProperty(target, "name", name);
+        setJsonProperty(target, "targetLufs", jsonNumber(targetLufs));
+
+        const auto hasLoudness = metrics.integratedLufs > -119.0f && std::isfinite(metrics.integratedLufs);
+        const auto hasTruePeak = truePeakForReport > -119.0f && std::isfinite(truePeakForReport);
+        if (hasLoudness && hasTruePeak)
+        {
+            const auto gainDelta = targetLufs - metrics.integratedLufs;
+            setJsonProperty(target, "gainDb", jsonNumber(gainDelta));
+            setJsonProperty(target, "estimatedTruePeakDbTp", jsonNumber(truePeakForReport + gainDelta));
+        }
+        else
+        {
+            setJsonProperty(target, "gainDb", juce::var());
+            setJsonProperty(target, "estimatedTruePeakDbTp", juce::var());
+        }
+
+        deliveryPreview.add(target);
+    };
+    addDeliveryTarget("Streaming -14 LUFS", -14.0f);
+    addDeliveryTarget("Apple -16 LUFS", -16.0f);
+    addDeliveryTarget("Broadcast -23 LUFS", -23.0f);
+    setJsonProperty(root, "deliveryPreview", deliveryPreview);
+
+    auto reference = juce::var { new juce::DynamicObject() };
+    setJsonProperty(reference, "captured", hasReferenceMetrics);
+    setJsonProperty(reference, "note", referenceNote());
+    if (referenceActionNote().isNotEmpty())
+        setJsonProperty(reference, "action", referenceActionNote());
+    if (hasReferenceMetrics)
+    {
+        setJsonProperty(reference, "metrics", makeMetricSummary(referenceMetrics));
+        setJsonProperty(reference, "lufsDelta", jsonNumber(metrics.integratedLufs - referenceMetrics.integratedLufs));
+        setJsonProperty(reference, "lowEndDeltaPercent", jsonNumber(lowEndOf(metrics) - lowEndOf(referenceMetrics)));
+        setJsonProperty(reference, "presenceDeltaPercent", jsonNumber(presenceOf(metrics) - presenceOf(referenceMetrics)));
+        setJsonProperty(reference, "crestDeltaDb", jsonNumber(metrics.crestDb - referenceMetrics.crestDb));
+        setJsonProperty(reference, "widthDeltaPercent", jsonNumber(metrics.widthPct - referenceMetrics.widthPct));
+    }
+    setJsonProperty(root, "reference", reference);
+
+    auto snapshots = juce::var { new juce::DynamicObject() };
+    setJsonProperty(snapshots, "hasA", hasSnapshotA);
+    setJsonProperty(snapshots, "hasB", hasSnapshotB);
+    setJsonProperty(snapshots, "note", snapshotNote());
+    if (hasSnapshotA)
+        setJsonProperty(snapshots, "a", makeMetricSummary(snapshotA));
+    if (hasSnapshotB)
+        setJsonProperty(snapshots, "b", makeMetricSummary(snapshotB));
+    if (hasSnapshotA && hasSnapshotB)
+    {
+        auto deltas = juce::var { new juce::DynamicObject() };
+        setJsonProperty(deltas, "lufs", jsonNumber(snapshotB.integratedLufs - snapshotA.integratedLufs));
+        setJsonProperty(deltas, "truePeakDb", jsonNumber(snapshotB.truePeakDb - snapshotA.truePeakDb));
+        setJsonProperty(deltas, "lowEndPercent", jsonNumber(lowEndOf(snapshotB) - lowEndOf(snapshotA)));
+        setJsonProperty(deltas, "presencePercent", jsonNumber(presenceOf(snapshotB) - presenceOf(snapshotA)));
+        setJsonProperty(deltas, "crestDb", jsonNumber(snapshotB.crestDb - snapshotA.crestDb));
+        setJsonProperty(deltas, "widthPercent", jsonNumber(snapshotB.widthPct - snapshotA.widthPct));
+        setJsonProperty(snapshots, "deltaBMinusA", deltas);
+    }
+    setJsonProperty(root, "snapshots", snapshots);
+
+    setJsonProperty(root, "plainTextReport", buildTextReport());
+
+    return juce::JSON::toString(root, false, 4);
 }

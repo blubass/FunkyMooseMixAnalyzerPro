@@ -74,6 +74,15 @@
                     <span class="formats">MP3, WAV, FLAC, AIFF supported up to 100MB</span>
                     <input type="file" id="fileInput" accept=".mp3,.wav,.flac,.aiff,.aif,.m4a,.ogg,.aac" hidden>
                 </div>
+                <div class="plugin-import-actions">
+                    <button id="pasteReportBtn" class="btn-secondary" type="button">
+                        <i class="fa-solid fa-clipboard"></i> <span id="pasteReportText">Plugin JSON einfügen</span>
+                    </button>
+                    <button id="importReportBtn" class="btn-secondary" type="button">
+                        <i class="fa-solid fa-file-import"></i> <span id="importReportText">JSON Datei importieren</span>
+                    </button>
+                    <input type="file" id="reportInput" accept=".json,application/json" hidden>
+                </div>
                 
                 <div class="loading-state hidden" id="loadingState">
                     <div class="spinner-container">
@@ -113,6 +122,7 @@
                         <select id="compareSelect" class="glass-input" style="display: none;">
                             <option value="">Compare...</option>
                         </select>
+                        <button id="exportEqBtn" class="btn-secondary"><i class="fa-solid fa-sliders"></i> <span id="exportEqText">Export EQ</span></button>
                         <button id="exportPdfBtn" class="btn-secondary"><i class="fa-solid fa-file-pdf"></i> <span id="exportText">Export PDF</span></button>
                         <button id="newAnalysisBtn" class="btn-primary"><i class="fa-solid fa-rotate-right"></i> <span>New Analysis</span></button>
                     </div>

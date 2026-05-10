@@ -12,6 +12,8 @@ ENV/
 build/
 dist/
 bin/
+plugin/artifacts/
+release-assets/
 *.egg-info/
 
 # Data & Audio

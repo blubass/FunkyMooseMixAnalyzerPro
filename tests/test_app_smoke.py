@@ -177,7 +177,7 @@ class AppSmokeTest(unittest.TestCase):
                 (req_id, "dup.wav", "Pop", json.dumps(initial_data)),
             )
 
-        def fake_analyze(_src, start, duration, tag, _req_id, _genre):
+        def fake_analyze(_ffmpeg_cmd, _src, start, duration, tag, _req_id, _genre, _snippet_dir, _image_dir):
             return make_slice(tag, start, duration)
 
         with mock.patch.object(mix_app, "analyze_slice", side_effect=fake_analyze):

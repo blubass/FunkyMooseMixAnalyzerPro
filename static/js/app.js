@@ -21,16 +21,21 @@ const els = {
     progressBar: document.getElementById('analysisProgressBar'),
     analysisSteps: document.getElementById('analysisSteps'),
     isInstrumental: document.getElementById('isInstrumental'),
-    vocalToggleText: document.getElementById('vocalToggleText')
+    vocalToggleText: document.getElementById('vocalToggleText'),
+    reportInput: document.getElementById('reportInput'),
+    importReportBtn: document.getElementById('importReportBtn'),
+    pasteReportBtn: document.getElementById('pasteReportBtn')
 };
 
 let analysisData = null;
 let referenceData = null;
 let currentLang = 'de';
 let genreProfiles = new Map();
+let rawGenres = [];
 let defaultGenre = 'Pop';
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+const MAX_REPORT_BYTES = 2 * 1024 * 1024;
 
 const i18n = {
     de: {
@@ -39,11 +44,20 @@ const i18n = {
         'drag-drop': 'Audiodatei hier ablegen',
         'or-click': 'oder klicken zum Auswählen',
         formats: 'MP3, WAV, FLAC, AIFF, M4A, OGG und AAC bis 100MB',
+        'paste-report': 'Plugin JSON einfügen',
+        'import-report': 'JSON Datei importieren',
+        'importing-report': 'Plugin-Report wird importiert...',
+        'report-imported': 'Plugin-Report importiert.',
+        'report-too-large': 'Der JSON Report ist zu groß.',
+        'report-invalid': 'Kein gültiger Plugin JSON Report.',
+        'report-import-failed': 'Plugin-Import fehlgeschlagen.',
+        'plugin-report-visual': 'Importierter Plugin-Report ohne Audiodatei',
         analyzing: 'Mix wird analysiert...',
         'analyzing-sub': 'Lautheit, Frequenzbalance, Stereobild und Dynamik werden analysiert...',
         'results-for': 'Analyse-Ergebnisse für ',
         'new-analysis': 'Neue Analyse',
         export: 'PDF Export',
+        export_eq: 'EQ Preset Export',
         'insights-title': 'Mix Insights & VST Empfehlungen',
         solution: 'Lösungsvorschlag:',
         vsts: 'Empfohlene VSTs:',
@@ -106,6 +120,7 @@ const i18n = {
         'resonance-detected': 'Resonanz bei',
         'full-track': 'Gesamttrack',
         'slice-average': 'Schnitt-Mittel',
+        'plugin-pass': 'Plugin-Pass',
         'mastering-title': 'Funky Moose Advice Engine',
         'mastering-sub': 'Smart Mix-Insights & Korrektur-Vorschläge',
         'vocal': 'Vocal',
@@ -131,7 +146,19 @@ const i18n = {
         'step-full': 'Gesamttrack Scan',
         'dep-title': 'FFmpeg fehlt',
         'dep-desc': 'FFmpeg wird für die Audio-Analyse benötigt, wurde aber nicht auf deinem System gefunden.',
-        'dep-check': 'Erneut prüfen'
+        'dep-check': 'Erneut prüfen',
+        'pdf-generating': 'PDF wird generiert...',
+        'pdf-saving': 'PDF wird gespeichert...',
+        'pdf-saved': '✓ PDF gespeichert:',
+        'pdf-failed': 'PDF Export fehlgeschlagen:',
+        'pdf-error': 'PDF-Fehler:',
+        'Popular': 'Popular',
+        'Band': 'Band / Live',
+        'Urban': 'Urban / Hip-Hop',
+        'Electronic': 'Electronic / Club',
+        'Cinematic': 'Cinematic / Score',
+        'Spoken & Media': 'Sprache & Medien',
+        'General': 'Allgemein'
     },
     en: {
         subtitle: 'Audio Intelligence Dashboard - by Uwe Arthur Felchle',
@@ -139,11 +166,20 @@ const i18n = {
         'drag-drop': 'Drag & drop your audio file',
         'or-click': 'or click to browse your files',
         formats: 'MP3, WAV, FLAC, AIFF, M4A, OGG and AAC up to 100MB',
+        'paste-report': 'Paste Plugin JSON',
+        'import-report': 'Import JSON File',
+        'importing-report': 'Importing plugin report...',
+        'report-imported': 'Plugin report imported.',
+        'report-too-large': 'The JSON report is too large.',
+        'report-invalid': 'Not a valid plugin JSON report.',
+        'report-import-failed': 'Plugin import failed.',
+        'plugin-report-visual': 'Imported plugin report without audio file',
         analyzing: 'Analyzing your mix...',
         'analyzing-sub': 'Analyzing loudness, spectrum, stereo field & dynamics...',
         'results-for': 'Analysis results for ',
         'new-analysis': 'New Analysis',
         export: 'Export PDF',
+        export_eq: 'Export EQ Preset',
         'insights-title': 'Mix Insights & VST Recommendations',
         solution: 'Suggested action:',
         vsts: 'Recommended VSTs:',
@@ -206,6 +242,7 @@ const i18n = {
         'resonance-detected': 'Resonance at',
         'full-track': 'Full track',
         'slice-average': 'Slice average',
+        'plugin-pass': 'Plugin pass',
         'mastering-title': 'Funky Moose Advice Engine',
         'mastering-sub': 'Smart Mix Insights & Tactical Advice',
         'vocal': 'Vocal',
@@ -231,7 +268,19 @@ const i18n = {
         'step-full': 'Full-track Scan',
         'dep-title': 'FFmpeg Missing',
         'dep-desc': 'FFmpeg is required for audio analysis but was not found on your system.',
-        'dep-check': 'Check Again'
+        'dep-check': 'Check Again',
+        'pdf-generating': 'Generating PDF...',
+        'pdf-saving': 'Saving PDF...',
+        'pdf-saved': '✓ PDF saved:',
+        'pdf-failed': 'PDF export failed:',
+        'pdf-error': 'PDF error:',
+        'Popular': 'Popular',
+        'Band': 'Band / Live',
+        'Urban': 'Urban / Hip-Hop',
+        'Electronic': 'Electronic / Club',
+        'Cinematic': 'Cinematic / Score',
+        'Spoken & Media': 'Spoken & Media',
+        'General': 'General'
     }
 };
 
@@ -251,6 +300,17 @@ const bandI18n = {
         Mids: 'Mids',
         Presence: 'Presence',
         Air: 'Air'
+    }
+};
+
+const genreI18n = {
+    de: {
+        "Schlager / Deutschpop": "Schlager / Deutschpop",
+        "Singer-Songwriter": "Singer-Songwriter"
+    },
+    en: {
+        "Schlager / Deutschpop": "Schlager / Pop",
+        "Singer-Songwriter": "Singer-Songwriter"
     }
 };
 
@@ -350,7 +410,7 @@ function getCurrentInsights() {
     } else {
         payload = analysisData.insights;
     }
-    
+
     if (payload && payload.insights) return payload.insights;
     return Array.isArray(payload) ? payload : [];
 }
@@ -371,6 +431,12 @@ function updateTexts() {
     document.querySelector('#loadingState p').textContent = t('analyzing-sub');
     setButtonLabel(els.newAnalysisBtn, 'fa-solid fa-rotate-right', t('new-analysis'));
     document.getElementById('exportText').textContent = t('export');
+    const eqExportEl = document.getElementById('exportEqText');
+    if (eqExportEl) eqExportEl.textContent = t('export_eq');
+    const importReportText = document.getElementById('importReportText');
+    if (importReportText) importReportText.textContent = t('import-report');
+    const pasteReportText = document.getElementById('pasteReportText');
+    if (pasteReportText) pasteReportText.textContent = t('paste-report');
     document.getElementById('copyNotesText').textContent = t('copy-notes');
     document.getElementById('libText').textContent = t('library');
     document.getElementById('historyText').textContent = t('history');
@@ -391,6 +457,7 @@ function updateTexts() {
     const assistantSub = document.querySelector('#masteringAssistant .assistant-header p');
     if (assistantSub) assistantSub.textContent = t('mastering-sub');
     updateVocalToggleLabel();
+    renderGenreOptions();
 
     if (analysisData) {
         els.filenameDisplay.textContent = analysisData.filename;
@@ -443,6 +510,15 @@ els.dropZone.addEventListener('keydown', (event) => {
     }
 });
 els.fileInput.addEventListener('change', event => handleFiles(event.target.files));
+if (els.reportInput) {
+    els.reportInput.addEventListener('change', event => handleReportFiles(event.target.files));
+}
+if (els.importReportBtn && els.reportInput) {
+    els.importReportBtn.addEventListener('click', () => els.reportInput.click());
+}
+if (els.pasteReportBtn) {
+    els.pasteReportBtn.addEventListener('click', importReportFromClipboard);
+}
 
 els.newAnalysisBtn.addEventListener('click', () => {
     els.resultsSection.classList.add('hidden');
@@ -451,6 +527,7 @@ els.newAnalysisBtn.addEventListener('click', () => {
     els.loadingState.classList.add('hidden');
     els.summaryStrip.classList.add('hidden');
     els.fileInput.value = '';
+    if (els.reportInput) els.reportInput.value = '';
     referenceData = null;
     els.compareSelect.value = '';
     setStatus(t('upload-ready'), 'success');
@@ -483,26 +560,34 @@ async function loadGenres() {
     try {
         const payload = await fetchJson('/genres');
         defaultGenre = payload.default || defaultGenre;
-        genreProfiles = new Map(payload.genres.map(profile => [profile.name, profile]));
-        const previousValue = els.genreSelect.value || defaultGenre;
-        els.genreSelect.replaceChildren();
-
-        const groups = new Map();
-        payload.genres.forEach(profile => {
-            const groupName = profile.group || 'Other';
-            if (!groups.has(groupName)) {
-                const optgroup = document.createElement('optgroup');
-                optgroup.label = groupName;
-                groups.set(groupName, optgroup);
-                els.genreSelect.appendChild(optgroup);
-            }
-            groups.get(groupName).appendChild(new Option(profile.name, profile.name));
-        });
-
-        els.genreSelect.value = genreProfiles.has(previousValue) ? previousValue : defaultGenre;
+        rawGenres = payload.genres;
+        genreProfiles = new Map(rawGenres.map(profile => [profile.name, profile]));
+        renderGenreOptions();
     } catch (error) {
         setStatus(error.message, 'error');
     }
+}
+
+function renderGenreOptions() {
+    if (!els.genreSelect || rawGenres.length === 0) return;
+    const previousValue = els.genreSelect.value || defaultGenre;
+    els.genreSelect.replaceChildren();
+
+    const groups = new Map();
+    rawGenres.forEach(profile => {
+        const rawGroup = profile.group || 'Other';
+        const groupName = (i18n[currentLang] && i18n[currentLang][rawGroup]) || rawGroup;
+        if (!groups.has(groupName)) {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = groupName;
+            groups.set(groupName, optgroup);
+            els.genreSelect.appendChild(optgroup);
+        }
+        const label = (genreI18n[currentLang] && genreI18n[currentLang][profile.name]) || profile.name;
+        groups.get(groupName).appendChild(new Option(label, profile.name));
+    });
+
+    els.genreSelect.value = genreProfiles.has(previousValue) ? previousValue : defaultGenre;
 }
 
 loadGenres();
@@ -638,7 +723,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', () => {
         els.actionButtons.style.display = 'flex';
     };
 
-    setStatus('PDF wird generiert...', 'success');
+    setStatus(t('pdf-generating'), 'success');
 
     html2pdf().set({
         margin: [10, 10, 10, 10],
@@ -647,7 +732,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', () => {
         html2canvas: { scale: 1.0, useCORS: true, logging: false, backgroundColor: '#101215' },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }
     }).from(els.resultsSection).outputPdf('datauristring').then(dataUri => {
-        setStatus('PDF wird gespeichert...', 'success');
+        setStatus(t('pdf-saving'), 'success');
         restoreExportUi();
         // Robust base64 extraction
         const base64 = dataUri.includes('base64,') ? dataUri.split('base64,')[1] : dataUri;
@@ -656,13 +741,13 @@ document.getElementById('exportPdfBtn').addEventListener('click', () => {
         if (window.pywebview && window.pywebview.api && window.pywebview.api.save_pdf) {
             window.pywebview.api.save_pdf(base64, pdfFilename).then(result => {
                 if (result && result.success) {
-                    setStatus(`✓ PDF gespeichert: ${result.path}`, 'success');
+                    setStatus(`${t('pdf-saved')} ${result.path}`, 'success');
                 } else if (result && result.cancelled) {
                     // user cancelled – do nothing
                 } else {
-                    setStatus(`PDF-Fehler: ${(result && result.error) || 'Unbekannter Fehler'}`, 'error');
+                    setStatus(`${t('pdf-error')} ${(result && result.error) || 'Unknown error'}`, 'error');
                 }
-            }).catch(err => setStatus(`PDF-Fehler: ${err}`, 'error'));
+            }).catch(err => setStatus(`${t('pdf-error')} ${err}`, 'error'));
             return;
         }
 
@@ -682,11 +767,37 @@ document.getElementById('exportPdfBtn').addEventListener('click', () => {
             document.body.appendChild(a);
             a.click();
             setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
-        }).catch(err => setStatus(`PDF Export fehlgeschlagen: ${err.message}`, 'error'));
+        }).catch(err => setStatus(`${t('pdf-failed')} ${err.message}`, 'error'));
     }).catch(error => {
         setStatus(error.message, 'error');
         restoreExportUi();
     });
+});
+
+document.getElementById('exportEqBtn').addEventListener('click', () => {
+    if (!analysisData || !analysisData.id) return;
+    setStatus('Exporting EQ Preset...', 'info');
+
+    fetch(`/export_eq_preset/${analysisData.id}`)
+        .then(response => {
+            if (!response.ok) throw new Error(`Server error ${response.status}`);
+            return response.blob();
+        })
+        .then(blob => {
+            const cleanFilename = (analysisData.filename || 'Report').replace(/\.[^/.]+$/, "");
+            const eqFilename = `EQ_Suggestions_${cleanFilename}.txt`;
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = eqFilename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
+
+            setStatus('✓ EQ Suggestions exported', 'success');
+        })
+        .catch(err => setStatus(`EQ export failed: ${err.message}`, 'error'));
 });
 
 function handleDrop(event) {
@@ -696,6 +807,11 @@ function handleDrop(event) {
 function handleFiles(files) {
     if (!files || files.length === 0) return;
     const file = files[0];
+    if (/\.json$/i.test(file.name) || file.type === 'application/json') {
+        handleReportFiles(files);
+        return;
+    }
+
     const validTypes = ['audio/mpeg', 'audio/wav', 'audio/flac', 'audio/x-aiff', 'audio/aiff', 'audio/ogg', 'audio/aac', 'audio/mp4'];
     const validExtension = /\.(mp3|wav|flac|aiff|aif|m4a|ogg|aac)$/i.test(file.name);
 
@@ -710,6 +826,79 @@ function handleFiles(files) {
     }
 
     uploadFile(file);
+}
+
+function readTextFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error(t('report-invalid')));
+        reader.readAsText(file);
+    });
+}
+
+async function handleReportFiles(files) {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (file.size > MAX_REPORT_BYTES) {
+        setStatus(t('report-too-large'), 'error');
+        return;
+    }
+
+    try {
+        const text = await readTextFile(file);
+        await importPluginReport(JSON.parse(text));
+    } catch (error) {
+        setStatus(`${t('report-import-failed')} ${error.message}`, 'error');
+    } finally {
+        if (els.reportInput) els.reportInput.value = '';
+    }
+}
+
+async function importReportFromClipboard() {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+        setStatus(t('report-invalid'), 'error');
+        return;
+    }
+
+    try {
+        const text = await navigator.clipboard.readText();
+        await importPluginReport(JSON.parse(text));
+    } catch (error) {
+        setStatus(`${t('report-import-failed')} ${error.message}`, 'error');
+    }
+}
+
+async function importPluginReport(report) {
+    els.dropZone.classList.add('hidden');
+    els.loadingState.classList.remove('hidden');
+    els.loadingTitle.textContent = t('importing-report');
+    els.progressBar.style.width = '35%';
+    if (els.analysisSteps) els.analysisSteps.replaceChildren();
+    referenceData = null;
+    els.compareSelect.value = '';
+    setStatus('', 'info');
+
+    try {
+        const payload = await fetchJson('/import_plugin_report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(report)
+        });
+
+        analysisData = payload.current_analysis;
+        els.progressBar.style.width = '100%';
+        displayResults(analysisData);
+        setStatus(t('report-imported'), 'success');
+    } catch (error) {
+        els.loadingState.classList.add('hidden');
+        els.dropZone.classList.remove('hidden');
+        setStatus(`${t('report-import-failed')} ${error.message}`, 'error');
+    } finally {
+        setTimeout(() => {
+            els.progressBar.style.width = '0%';
+        }, 300);
+    }
 }
 
 async function uploadFile(file) {
@@ -848,11 +1037,19 @@ function renderResults(data, options = {}) {
     els.resultsSection.classList.toggle('hidden', !showResults);
     els.filenameDisplay.textContent = data.filename;
     els.resultsPrefix.textContent = t('results-for');
-    els.audioPlayer.src = data.audio_url;
-    els.audioPlayer.load();
+    if (data.audio_url) {
+        els.audioPlayer.classList.remove('hidden');
+        els.audioPlayer.src = data.audio_url;
+        els.audioPlayer.load();
+    } else {
+        els.audioPlayer.pause();
+        els.audioPlayer.removeAttribute('src');
+        els.audioPlayer.load();
+        els.audioPlayer.classList.add('hidden');
+    }
     els.tabsContainer.replaceChildren();
 
-    data.slices.forEach((slice, index) => {
+    (data.slices || []).forEach((slice, index) => {
         const btn = document.createElement('button');
         btn.className = `tab-btn ${index === 0 ? 'active' : ''}`;
         btn.dataset.tag = slice.tag;
@@ -867,21 +1064,22 @@ function renderResults(data, options = {}) {
 
     renderSummary(data);
     renderMasteringAssistant(data);
-    if (data.slices.length > 0) renderSlice(data.slices[0]);
+    if ((data.slices || []).length > 0) renderSlice(data.slices[0]);
     if (refreshHistory) fetchHistory();
 }
 
 function renderMasteringAssistant(data) {
     const container = document.getElementById('masteringAssistant');
     const priorityList = document.getElementById('priorityActions');
-    
-    if (!data.priority_actions || data.priority_actions.length === 0) {
-        container.classList.add('hidden');
-        return;
-    }
-    
+
     container.classList.remove('hidden');
-    priorityList.innerHTML = data.priority_actions.map((action, idx) => `
+
+    let actions = data.priority_actions || [];
+    if (data.insights_by_lang && data.insights_by_lang[currentLang]) {
+        actions = data.insights_by_lang[currentLang].priority_actions || [];
+    }
+
+    priorityList.innerHTML = actions.map((action, idx) => `
         <div class="priority-card">
             <i class="fa-solid fa-circle-exclamation"></i>
             <span>${escapeHtml(action)}</span>
@@ -904,6 +1102,11 @@ function setupABComparison() {
     
     const originalSrc = analysisData.audio_url;
     const refSrc = referenceData.audio_url;
+    if (!originalSrc || !refSrc) {
+        abContainer.classList.add('hidden');
+        window.currentAB = 'A';
+        return;
+    }
     
     const updateChartsHighlight = (active) => {
         window.currentAB = active;
@@ -951,7 +1154,12 @@ function renderSummary(data) {
     }[summary.verdict] || 'summary-polish';
     const confidence = summary.confidence || { score: 0, label: 'low' };
     const confidenceLabel = t(`confidence-${confidence.label || 'low'}`);
-    const loudnessScope = t(summary.loudness_scope === 'full-track' ? 'full-track' : 'slice-average');
+    const loudnessScopeKey = summary.loudness_scope === 'full-track'
+        ? 'full-track'
+        : summary.loudness_scope === 'plugin-pass'
+            ? 'plugin-pass'
+            : 'slice-average';
+    const loudnessScope = t(loudnessScopeKey);
     const overallScore = summary.overall_score != null ? summary.overall_score : null;
     const scoreColor = overallScore == null ? '#fff'
         : overallScore >= 80 ? 'var(--success)'
@@ -1046,6 +1254,23 @@ function renderSlice(slice) {
             ${r.band ? `<strong>${escapeHtml(bandLabel(r.band))}</strong> ` : ''}${t('resonance-detected')} ${r.freq} Hz (+${r.gain} dB)
         </div>
     `).join('');
+    const waveformHtml = slice.waveform_url
+        ? `<img src="${escapeHtml(slice.waveform_url)}?t=${Date.now()}" alt="Waveform">`
+        : `<div class="visual-placeholder"><i class="fa-solid fa-file-import"></i><span>${t('plugin-report-visual')}</span></div>`;
+    const hasSpectrumData = slice.fft_data && slice.fft_data.freqs && slice.fft_data.mid;
+    const spectrumHtml = hasSpectrumData ? `
+        <div class="spectrum-chart-header">
+            <span class="spectrum-chart-title">
+                <i class="fa-solid fa-chart-line"></i> ${t('spectrum-title')}
+            </span>
+            <span class="spectrum-hint">${t('spectrum-hint')}</span>
+        </div>
+        <canvas id="spectrumChart" style="width:100%;height:180px;"></canvas>
+        <div class="resonance-list">${resonanceHtml}</div>
+    ` : `
+        <div class="visual-placeholder"><i class="fa-solid fa-chart-simple"></i><span>${t('plugin-report-visual')}</span></div>
+        <div class="resonance-list">${resonanceHtml}</div>
+    `;
 
     els.tabContent.innerHTML = `
         <div class="dashboard-grid">
@@ -1129,17 +1354,10 @@ function renderSlice(slice) {
                 <h3><i class="fa-solid fa-wave-square"></i> ${t('visuals')}</h3>
                 <div class="visual-grid">
                     <div class="visual-container">
-                        <img src="${escapeHtml(slice.waveform_url)}?t=${Date.now()}" alt="Waveform">
+                        ${waveformHtml}
                     </div>
                     <div class="visual-container spectrum-chart-container">
-                        <div class="spectrum-chart-header">
-                            <span class="spectrum-chart-title">
-                                <i class="fa-solid fa-chart-line"></i> ${t('spectrum-title')}
-                            </span>
-                            <span class="spectrum-hint">${t('spectrum-hint')}</span>
-                        </div>
-                        <canvas id="spectrumChart" style="width:100%;height:180px;"></canvas>
-                        <div class="resonance-list">${resonanceHtml}</div>
+                        ${spectrumHtml}
                     </div>
                 </div>
             </div>
@@ -1264,13 +1482,13 @@ const bgCanvas = document.getElementById('bgCanvas');
 // Interactive Spectrum Chart (Chart.js)
 // ─────────────────────────────────────────────────────────────
 async function renderSpectrumChart(slice, refData) {
-    const canvas = document.getElementById('spectrumChart');
-    if (!canvas) return;
-
     if (window.spectrumChartInstance) {
         window.spectrumChartInstance.destroy();
         window.spectrumChartInstance = null;
     }
+
+    const canvas = document.getElementById('spectrumChart');
+    if (!canvas) return;
 
     // Show loading skeleton
     canvas.style.opacity = '0.4';

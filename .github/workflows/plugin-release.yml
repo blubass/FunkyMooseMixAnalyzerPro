@@ -1,0 +1,354 @@
+name: Plugin Release
+
+on:
+  push:
+    tags:
+      - "plugin-v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing tag to package and publish, for example plugin-v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  PRODUCT_NAME: "Funky Moose Mix Analyzer"
+  RELEASE_BASENAME: "Funky-Moose-Mix-Analyzer"
+
+jobs:
+  build-macos:
+    name: Build macOS VST3, AU, and Standalone
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag_name || github.ref }}
+
+      - name: Checkout JUCE
+        run: |
+          git clone --depth 1 https://github.com/juce-framework/JUCE.git "$RUNNER_TEMP/JUCE"
+
+      - name: Configure
+        run: |
+          cmake -S plugin -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DMIX_ANALYZER_JUCE_DIR="$RUNNER_TEMP/JUCE"
+
+      - name: Build
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Package macOS artifacts
+        run: |
+          set -euo pipefail
+
+          package_tag="${RELEASE_TAG//\//-}"
+          package_root="dist/${RELEASE_BASENAME}-macOS-${package_tag}"
+          artefact_root="build/FunkyMooseMixAnalyzer_artefacts"
+
+          mkdir -p "$package_root"
+
+          copy_bundle() {
+            local bundle_name="$1"
+            local bundle_path
+
+            bundle_path="$(find "$artefact_root" -type d -name "$bundle_name" -print -quit)"
+            if [[ -z "$bundle_path" ]]; then
+              echo "::error::Missing macOS bundle: $bundle_name"
+              exit 1
+            fi
+
+            ditto "$bundle_path" "$package_root/$bundle_name"
+          }
+
+          copy_bundle "${PRODUCT_NAME}.vst3"
+          copy_bundle "${PRODUCT_NAME}.component"
+          copy_bundle "${PRODUCT_NAME}.app"
+
+          find "$package_root" -type f -name "moduleinfo.json" -delete
+
+          for bundle in \
+            "$package_root/${PRODUCT_NAME}.vst3" \
+            "$package_root/${PRODUCT_NAME}.component" \
+            "$package_root/${PRODUCT_NAME}.app"
+          do
+            codesign --force --deep --sign - "$bundle"
+            codesign --verify --deep "$bundle"
+          done
+
+          cat > "$package_root/README_MACOS_DE_EN.txt" <<'README'
+          Funky Moose Mix Analyzer - macOS Build
+          =====================================
+
+          Deutsch
+          -------
+          Inhalt:
+          - Funky Moose Mix Analyzer.vst3
+          - Funky Moose Mix Analyzer.component
+          - Funky Moose Mix Analyzer.app
+
+          VST3 Installation:
+          1. Schließe Cubase oder deine DAW.
+          2. Kopiere "Funky Moose Mix Analyzer.vst3" nach:
+             ~/Library/Audio/Plug-Ins/VST3
+          3. Starte Cubase neu und lasse den Plugin-Scan laufen.
+
+          AU Installation:
+          1. Schließe Logic, GarageBand oder deine AU-DAW.
+          2. Kopiere "Funky Moose Mix Analyzer.component" nach:
+             ~/Library/Audio/Plug-Ins/Components
+          3. Starte die DAW neu und lasse den AU-Scan laufen.
+
+          Standalone:
+          - Starte "Funky Moose Mix Analyzer.app" direkt.
+
+          Hinweis:
+          Dieses Paket ist ad-hoc signiert, aber nicht Apple-notarisiert. Falls macOS
+          beim ersten Start blockiert, öffne die App einmal per Rechtsklick > Öffnen.
+
+          English
+          -------
+          Contents:
+          - Funky Moose Mix Analyzer.vst3
+          - Funky Moose Mix Analyzer.component
+          - Funky Moose Mix Analyzer.app
+
+          VST3 installation:
+          1. Close Cubase or your DAW.
+          2. Copy "Funky Moose Mix Analyzer.vst3" to:
+             ~/Library/Audio/Plug-Ins/VST3
+          3. Restart Cubase and let it rescan plugins.
+
+          AU installation:
+          1. Close Logic, GarageBand, or your AU host.
+          2. Copy "Funky Moose Mix Analyzer.component" to:
+             ~/Library/Audio/Plug-Ins/Components
+          3. Restart the DAW and let it rescan Audio Units.
+
+          Standalone:
+          - Run "Funky Moose Mix Analyzer.app" directly.
+
+          Note:
+          This package is ad-hoc signed, but not Apple-notarized. If macOS blocks the
+          first launch, open the app once with right-click > Open.
+          README
+
+          ditto -c -k --norsrc --keepParent \
+            "$package_root" \
+            "dist/${RELEASE_BASENAME}-macOS-${package_tag}.zip"
+
+      - name: Upload macOS release ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-zip
+          path: dist/*.zip
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows VST3 and Standalone
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag_name || github.ref }}
+
+      - name: Checkout JUCE
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/juce-framework/JUCE.git "$env:RUNNER_TEMP\JUCE"
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S plugin -B build `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DMIX_ANALYZER_JUCE_DIR="$env:RUNNER_TEMP\JUCE"
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Package Windows artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $packageTag = $env:RELEASE_TAG -replace '[\\/]', '-'
+          $packageRoot = "dist\$($env:RELEASE_BASENAME)-Windows-$packageTag"
+          New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
+
+          $vst3 = Get-ChildItem -Path build/FunkyMooseMixAnalyzer_artefacts -Recurse -Directory -Filter "*.vst3" |
+            Select-Object -First 1
+          if (-not $vst3) {
+            throw "Missing Windows VST3 bundle."
+          }
+          Copy-Item $vst3.FullName -Destination "$packageRoot\$($vst3.Name)" -Recurse -Force
+
+          $standalone = Get-ChildItem -Path build/FunkyMooseMixAnalyzer_artefacts -Recurse -File -Filter "*.exe" |
+            Where-Object { $_.FullName -match "\\Standalone\\" } |
+            Select-Object -First 1
+          if (-not $standalone) {
+            throw "Missing Windows standalone executable."
+          }
+          Copy-Item $standalone.FullName -Destination "$packageRoot\$($standalone.Name)" -Force
+
+          Get-ChildItem -Path $packageRoot -Recurse -File -Filter "moduleinfo.json" |
+            Remove-Item -Force
+
+          $readme = @'
+          Funky Moose Mix Analyzer - Windows Build
+          ========================================
+
+          Deutsch
+          -------
+          Inhalt:
+          - Funky Moose Mix Analyzer.vst3
+          - Funky Moose Mix Analyzer.exe
+
+          VST3 Installation:
+          1. Schließe Cubase oder deine DAW.
+          2. Kopiere den kompletten Ordner "Funky Moose Mix Analyzer.vst3" nach:
+             C:\Program Files\Common Files\VST3
+          3. Starte Cubase neu und lasse den Plugin-Scan laufen.
+          4. Suche nach "Funky Moose Mix Analyzer" in den Audio-Effekten.
+
+          Standalone:
+          - Starte "Funky Moose Mix Analyzer.exe" direkt.
+
+          Hinweis:
+          Der VST3-Ordner muss komplett kopiert werden. Nicht nur die einzelne Datei im
+          Unterordner "Contents\x86_64-win" kopieren.
+
+          English
+          -------
+          Contents:
+          - Funky Moose Mix Analyzer.vst3
+          - Funky Moose Mix Analyzer.exe
+
+          VST3 installation:
+          1. Close Cubase or your DAW.
+          2. Copy the complete folder "Funky Moose Mix Analyzer.vst3" to:
+             C:\Program Files\Common Files\VST3
+          3. Restart Cubase and let it rescan plugins.
+          4. Search for "Funky Moose Mix Analyzer" in the audio effects list.
+
+          Standalone:
+          - Run "Funky Moose Mix Analyzer.exe" directly.
+
+          Note:
+          Copy the complete VST3 folder. Do not copy only the single binary inside
+          "Contents\x86_64-win".
+          '@
+          $readme | Set-Content -Path "$packageRoot\README_WINDOWS_DE_EN.txt" -Encoding UTF8
+
+          Compress-Archive `
+            -Path $packageRoot `
+            -DestinationPath "dist\$($env:RELEASE_BASENAME)-Windows-$packageTag.zip" `
+            -Force
+
+      - name: Upload Windows release ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-zip
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - build-macos
+      - build-windows
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
+
+    steps:
+      - name: Download release ZIPs
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: "*-release-zip"
+          merge-multiple: true
+
+      - name: Write release notes
+        run: |
+          cat > release-notes.md <<'NOTES'
+          ## Deutsch
+
+          Automatischer Plugin-Release für Funky Moose Mix Analyzer.
+
+          Enthalten:
+          - macOS: VST3, AU Component und Standalone App
+          - Windows: VST3 und Standalone EXE
+          - Zweisprachige Installationshinweise in jedem ZIP
+
+          Wichtige Funktionen:
+          - Live LUFS, True Peak, RMS, Crest, LRA und Transientenanalyse
+          - Genre-basierte Zielwerte und professionelle Mix-Bewertung
+          - Full-pass Worst-Case-Holds für belastbare Urteile
+          - Low-End/Mono/Phase-, Reference- und A/B-Checks
+          - Copy Report mit Mix Doctor Summary für DAW-Notizen
+
+          Hinweis:
+          Die macOS-Builds sind ad-hoc signiert, aber nicht Apple-notarisiert.
+
+          ## English
+
+          Automated plugin release for Funky Moose Mix Analyzer.
+
+          Included:
+          - macOS: VST3, AU Component, and Standalone App
+          - Windows: VST3 and Standalone EXE
+          - Bilingual install notes in each ZIP
+
+          Key features:
+          - Live LUFS, True Peak, RMS, crest, LRA, and transient analysis
+          - Genre-aware targets and professional mix judgement
+          - Full-pass worst-case holds for reliable decisions
+          - Low-end/mono/phase, reference, and A/B checks
+          - Copy report with Mix Doctor Summary for DAW notes
+
+          Note:
+          The macOS builds are ad-hoc signed, but not Apple-notarized.
+          NOTES
+
+      - name: Create or update release
+        run: |
+          set -euo pipefail
+
+          title="Funky Moose Mix Analyzer Plugin ${RELEASE_TAG#plugin-}"
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --notes-file release-notes.md
+
+            gh release upload "$RELEASE_TAG" release-assets/*.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/*.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --notes-file release-notes.md \
+              --verify-tag
+          fi

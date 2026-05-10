@@ -58,7 +58,7 @@ warm-up gating, ready full-pass judgement, clipping priority, low-end phase
 blocking, and full-pass worst-case holds. The suite also generates small WAV
 fixtures at runtime and runs them through the real processor path to verify
 sample peak, RMS, crest, LUFS sanity, clipping, phase correlation, mono loss,
-and spectral band routing:
+spectral band routing, and DAW state round-trips for references/A-B snapshots:
 
 ```bash
 cmake -S plugin -B plugin/build -DMIX_ANALYZER_JUCE_DIR=/Users/uwearthurfelchle/Developer/JUCE
@@ -85,4 +85,4 @@ sudo bash plugin/install_macos.sh --system --reset-cubase-cache
 ## Next plugin steps
 
 - Add a deeper report/export bridge between the plugin and the desktop app.
-- Add offline fixture-based audio regression tests for known mixes/references.
+- Add host/plugin validation with pluginval or similar before public releases.

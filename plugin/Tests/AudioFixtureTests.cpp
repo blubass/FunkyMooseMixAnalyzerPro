@@ -13,23 +13,94 @@ constexpr float pi = juce::MathConstants<float>::pi;
 
 int failures = 0;
 
-void expect(bool condition, const char* message)
+void expect(bool condition, const juce::String& message)
 {
     if (condition)
         return;
 
-    std::cerr << "FAIL: " << message << '\n';
+    std::cerr << "FAIL: " << message.toRawUTF8() << '\n';
     ++failures;
 }
 
-void expectNear(float actual, float expected, float tolerance, const char* message)
+void expectNear(float actual, float expected, float tolerance, const juce::String& message)
 {
     if (std::isfinite(actual) && std::abs(actual - expected) <= tolerance)
         return;
 
-    std::cerr << "FAIL: " << message << " expected " << expected
+    std::cerr << "FAIL: " << message.toRawUTF8() << " expected " << expected
               << " +/- " << tolerance << ", got " << actual << '\n';
     ++failures;
+}
+
+fmma::AnalyzerMetrics makeStoredMetrics(float seed)
+{
+    fmma::AnalyzerMetrics metrics;
+    metrics.momentaryLufs = -12.0f - seed;
+    metrics.shortTermLufs = -13.0f - seed;
+    metrics.integratedLufs = -14.0f - seed;
+    metrics.truePeakDb = -1.5f + (seed * 0.1f);
+    metrics.truePeakHoldDb = -1.3f + (seed * 0.1f);
+    metrics.worstTruePeakDb = -1.1f + (seed * 0.1f);
+    metrics.lraLu = 5.0f + seed;
+    metrics.rmsDb = -17.0f + seed;
+    metrics.peakDb = -6.0f + seed;
+    metrics.crestDb = 11.0f + seed;
+    metrics.monoLossDb = -0.5f - seed;
+    metrics.correlation = 0.85f - (seed * 0.05f);
+    metrics.worstCorrelation = 0.65f - (seed * 0.05f);
+    metrics.widthPct = 42.0f + seed;
+    metrics.msRatioDb = -7.0f + seed;
+    metrics.clippedPercent = 0.01f * seed;
+    metrics.worstClippedPercent = 0.02f * seed;
+    metrics.spectralCentroidHz = 1800.0f + (seed * 100.0f);
+    metrics.spectralRolloffHz = 9000.0f + (seed * 200.0f);
+    metrics.resonanceFreqHz = 3200.0f + (seed * 100.0f);
+    metrics.resonanceGainDb = 7.0f + seed;
+    metrics.worstResonanceFreqHz = 3600.0f + (seed * 100.0f);
+    metrics.worstResonanceGainDb = 9.0f + seed;
+    metrics.worstLowMidPercent = 18.0f + seed;
+    metrics.analysisSeconds = 64.0f + seed;
+    metrics.fullPassSeconds = 60.0f + seed;
+    metrics.fullPassCompleted = true;
+    metrics.analysisFrozen = true;
+
+    for (auto band = 0; band < fmma::bandCount; ++band)
+    {
+        const auto index = static_cast<size_t>(band);
+        metrics.bandPercents[index] = (static_cast<float>(band) * 3.0f) + seed;
+        metrics.bandCorrelations[index] = 0.9f - (static_cast<float>(band) * 0.08f) - (seed * 0.01f);
+        metrics.bandSideRatiosDb[index] = -18.0f + static_cast<float>(band) + seed;
+    }
+
+    return metrics;
+}
+
+void expectStoredMetricMatches(const fmma::AnalyzerMetrics& actual,
+                               const fmma::AnalyzerMetrics& expected,
+                               const char* label)
+{
+    const auto prefix = juce::String(label) + " should round-trip ";
+    expectNear(actual.integratedLufs, expected.integratedLufs, 0.001f, prefix + "integrated LUFS");
+    expectNear(actual.truePeakDb, expected.truePeakDb, 0.001f, prefix + "true peak");
+    expectNear(actual.worstTruePeakDb, expected.worstTruePeakDb, 0.001f, prefix + "worst true peak");
+    expectNear(actual.lraLu, expected.lraLu, 0.001f, prefix + "LRA");
+    expectNear(actual.correlation, expected.correlation, 0.001f, prefix + "correlation");
+    expectNear(actual.widthPct, expected.widthPct, 0.001f, prefix + "width");
+    expectNear(actual.worstClippedPercent, expected.worstClippedPercent, 0.001f, prefix + "worst clipping");
+    expectNear(actual.spectralCentroidHz, expected.spectralCentroidHz, 0.001f, prefix + "centroid");
+    expectNear(actual.worstResonanceGainDb, expected.worstResonanceGainDb, 0.001f, prefix + "worst resonance");
+    expectNear(actual.fullPassSeconds, expected.fullPassSeconds, 0.001f, prefix + "full-pass seconds");
+    expect(actual.fullPassCompleted == expected.fullPassCompleted, prefix + "full-pass flag");
+    expect(actual.analysisFrozen == expected.analysisFrozen, prefix + "frozen flag");
+
+    for (auto band = 0; band < fmma::bandCount; ++band)
+    {
+        const auto index = static_cast<size_t>(band);
+        const auto bandLabel = prefix + "band " + juce::String(band) + " ";
+        expectNear(actual.bandPercents[index], expected.bandPercents[index], 0.001f, bandLabel + "percent");
+        expectNear(actual.bandCorrelations[index], expected.bandCorrelations[index], 0.001f, bandLabel + "correlation");
+        expectNear(actual.bandSideRatiosDb[index], expected.bandSideRatiosDb[index], 0.001f, bandLabel + "side ratio");
+    }
 }
 
 float sineSample(int sample, float frequency, float peakGain, float phaseRadians = 0.0f)
@@ -242,6 +313,47 @@ void spectralFixtureFindsExpectedBand()
     expect(presenceMetrics.spectralCentroidHz > lowMetrics.spectralCentroidHz + 1500.0f,
            "presence fixture should have a much higher spectral centroid than low fixture");
 }
+
+void storedAnalysisStateRoundTrips()
+{
+    FunkyMooseMixAnalyzerAudioProcessor source;
+    const auto reference = makeStoredMetrics(1.0f);
+    const auto snapshotA = makeStoredMetrics(2.0f);
+    const auto snapshotB = makeStoredMetrics(3.0f);
+
+    source.storeReferenceMetrics(reference);
+    source.storeSnapshotA(snapshotA);
+    source.storeSnapshotB(snapshotB);
+
+    juce::MemoryBlock state;
+    source.getStateInformation(state);
+    expect(state.getSize() > 0, "processor state should serialise stored analysis data");
+
+    FunkyMooseMixAnalyzerAudioProcessor restored;
+    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+
+    fmma::AnalyzerMetrics restoredReference;
+    fmma::AnalyzerMetrics restoredSnapshotA;
+    fmma::AnalyzerMetrics restoredSnapshotB;
+    expect(restored.getStoredReferenceMetrics(restoredReference), "reference metrics should restore from state");
+    expect(restored.getStoredSnapshotA(restoredSnapshotA), "snapshot A should restore from state");
+    expect(restored.getStoredSnapshotB(restoredSnapshotB), "snapshot B should restore from state");
+
+    expectStoredMetricMatches(restoredReference, reference, "reference");
+    expectStoredMetricMatches(restoredSnapshotA, snapshotA, "snapshot A");
+    expectStoredMetricMatches(restoredSnapshotB, snapshotB, "snapshot B");
+
+    restored.clearStoredReferenceMetrics();
+    restored.clearStoredSnapshots();
+    juce::MemoryBlock clearedState;
+    restored.getStateInformation(clearedState);
+
+    FunkyMooseMixAnalyzerAudioProcessor cleared;
+    cleared.setStateInformation(clearedState.getData(), static_cast<int>(clearedState.getSize()));
+    expect(! cleared.getStoredReferenceMetrics(restoredReference), "cleared reference metrics should stay cleared after state load");
+    expect(! cleared.getStoredSnapshotA(restoredSnapshotA), "cleared snapshot A should stay cleared after state load");
+    expect(! cleared.getStoredSnapshotB(restoredSnapshotB), "cleared snapshot B should stay cleared after state load");
+}
 }
 
 int main()
@@ -250,6 +362,7 @@ int main()
     antiPhaseFixtureFlagsMonoLoss();
     clippedFixtureFlagsPeaks();
     spectralFixtureFindsExpectedBand();
+    storedAnalysisStateRoundTrips();
 
     if (failures == 0)
     {

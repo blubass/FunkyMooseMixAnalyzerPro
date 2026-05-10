@@ -56,6 +56,9 @@ jobs:
               Copy-Item $_.FullName -Destination "dist/$($_.Name)" -Force
             }
 
+          Get-ChildItem -Path dist -Recurse -File -Filter "moduleinfo.json" |
+            Remove-Item -Force
+
           if (-not (Get-ChildItem -Path dist -Recurse | Where-Object { -not $_.PSIsContainer })) {
             throw "No Windows plugin artifacts were collected."
           }

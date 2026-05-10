@@ -100,6 +100,23 @@ jobs:
             fi
           }
 
+          run_auval_checked() {
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              killall AudioComponentRegistrar || true
+              sleep $((attempt * 2))
+
+              if auval -v aufx FmMa Fnky; then
+                return 0
+              fi
+
+              echo "::warning::auval did not find the AU on attempt $attempt; retrying after registrar refresh"
+            done
+
+            echo "::error::auval failed after repeated AudioComponent registration attempts"
+            return 1
+          }
+
           vst3="$(find_bundle "${PRODUCT_NAME}.vst3")"
           component="$(find_bundle "${PRODUCT_NAME}.component")"
 
@@ -123,10 +140,8 @@ jobs:
           ditto "$component" "$installed_component"
           codesign --force --deep --sign - "$installed_component"
           codesign --verify --deep "$installed_component"
-          killall AudioComponentRegistrar || true
-          sleep 2
 
-          auval -v aufx FmMa Fnky
+          run_auval_checked
           run_pluginval_checked "$installed_component"
 
   validate-windows:

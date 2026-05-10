@@ -17,6 +17,7 @@ permissions:
 env:
   PRODUCT_NAME: "Funky Moose Mix Analyzer"
   RELEASE_BASENAME: "Funky-Moose-Mix-Analyzer"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build-macos:

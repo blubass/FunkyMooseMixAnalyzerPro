@@ -271,7 +271,7 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
     if (--assessmentCountdown <= 0 || genreIndex != lastGenreIndex || instrumentalState != lastInstrumentalState)
     {
         assessment = fmma::assessMix(makeAssessmentInput(), fmma::getGenreProfile(genreIndex));
-        assessmentCountdown = 6;
+        assessmentCountdown = 1;
         lastGenreIndex = genreIndex;
         lastInstrumentalState = instrumentalState;
     }
@@ -290,13 +290,13 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::smoothDisplayMetrics(const fmma:
 
     constexpr auto slow = 0.12f;
     constexpr auto medium = 0.18f;
-    metrics.momentaryLufs = smoothValue(metrics.momentaryLufs, raw.momentaryLufs, medium, 0.05f);
-    metrics.shortTermLufs = smoothValue(metrics.shortTermLufs, raw.shortTermLufs, slow, 0.04f);
-    metrics.integratedLufs = smoothValue(metrics.integratedLufs, raw.integratedLufs, 0.08f, 0.03f);
-    metrics.truePeakDb = smoothValue(metrics.truePeakDb, raw.truePeakDb, medium, 0.04f);
+    metrics.momentaryLufs = raw.momentaryLufs;
+    metrics.shortTermLufs = raw.shortTermLufs;
+    metrics.integratedLufs = raw.integratedLufs;
+    metrics.truePeakDb = raw.truePeakDb;
     metrics.truePeakHoldDb = raw.truePeakHoldDb;
     metrics.worstTruePeakDb = raw.worstTruePeakDb;
-    metrics.lraLu = smoothValue(metrics.lraLu, raw.lraLu, 0.08f, 0.05f);
+    metrics.lraLu = raw.lraLu;
     metrics.rmsDb = smoothValue(metrics.rmsDb, raw.rmsDb, slow, 0.04f);
     metrics.peakDb = smoothValue(metrics.peakDb, raw.peakDb, medium, 0.05f);
     metrics.crestDb = smoothValue(metrics.crestDb, raw.crestDb, slow, 0.05f);
@@ -312,9 +312,9 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::smoothDisplayMetrics(const fmma:
     metrics.msRatioDb = smoothValue(metrics.msRatioDb, raw.msRatioDb, 0.07f, 0.05f);
     metrics.stereoBalanceDb = smoothValue(metrics.stereoBalanceDb, raw.stereoBalanceDb, 0.08f, 0.03f);
     metrics.dcOffset = smoothValue(metrics.dcOffset, raw.dcOffset, 0.05f, 0.00002f);
-    metrics.clippedPercent = smoothValue(metrics.clippedPercent, raw.clippedPercent, 0.05f, 0.001f);
+    metrics.clippedPercent = raw.clippedPercent;
     metrics.worstClippedPercent = raw.worstClippedPercent;
-    metrics.silencePercent = smoothValue(metrics.silencePercent, raw.silencePercent, 0.05f, 0.05f);
+    metrics.silencePercent = raw.silencePercent;
     metrics.transientDensity = smoothValue(metrics.transientDensity, raw.transientDensity, 0.09f, 0.05f);
     metrics.attackTimeMs = smoothValue(metrics.attackTimeMs, raw.attackTimeMs, 0.07f, 0.3f);
     metrics.percussionEnergyPct = smoothValue(metrics.percussionEnergyPct, raw.percussionEnergyPct, 0.08f, 0.1f);
@@ -1100,6 +1100,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport() const
     report << "Genre Profile: " << profile.name << "\n";
     report << "Mode: " << (input.instrumental ? "Instrumental" : "Vocal / Full Mix") << "\n";
     report << "Analysis Scope: " << (metrics.hostAutoPassActive ? "Host Recording" : assessment.analysisScope) << "\n";
+    report << "Measurement Standard: ITU-R BS.1770-5 / EBU Mode\n";
     report << "Analysis Time: " << formatDuration(metrics.fullPassCompleted ? metrics.fullPassSeconds : metrics.analysisSeconds) << "\n";
     report << "Confidence: " << assessment.confidenceLabel << " (" << assessment.confidenceScore << "/100)\n";
     report << "Confidence Note: " << assessment.confidenceText << "\n";
@@ -1270,6 +1271,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport() const
     setJsonProperty(root, "schema", "funky-moose.mix-analyzer.report");
     setJsonProperty(root, "schemaVersion", 1);
     setJsonProperty(root, "source", "Funky Moose Mix Analyzer Plugin");
+    setJsonProperty(root, "measurementStandard", "ITU-R BS.1770-5 / EBU Mode");
     setJsonProperty(root, "generatedAt", juce::Time::getCurrentTime().toISO8601(true));
     setJsonProperty(root, "mode", input.instrumental ? "instrumental" : "vocal-full-mix");
     setJsonProperty(root, "analysisScope", metrics.hostAutoPassActive ? "host-recording" : assessment.analysisScope);

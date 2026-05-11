@@ -128,6 +128,34 @@ class AppSmokeTest(unittest.TestCase):
         self.assertEqual(summary["measured_lufs"], -10.5)
         self.assertEqual(summary["loudness_scope"], "full-track")
 
+    def test_slice_lufs_aggregation_is_energy_weighted(self):
+        loud = make_slice("Intro", duration=10.0)
+        quiet = make_slice("Outro", duration=10.0)
+        loud["I"] = -10.0
+        quiet["I"] = -20.0
+
+        aggregate = mix_app.aggregate_slices([loud, quiet])
+
+        self.assertAlmostEqual(aggregate["I"], -12.6, places=1)
+
+    def test_summary_scores_near_miss_ranges_proportionally(self):
+        slice_data = make_slice("Middle", duration=30.0)
+        slice_data["I"] = -10.0
+        slice_data["bands"] = [
+            {"name": "Sub", "range": "20-60Hz", "percent": 3.0},
+            {"name": "Bass", "range": "60-250Hz", "percent": 5.0},
+            {"name": "Low-Mids", "range": "250-500Hz", "percent": 16.0},
+            {"name": "Mids", "range": "500-2000Hz", "percent": 24.0},
+            {"name": "Presence", "range": "2000-6000Hz", "percent": 20.0},
+            {"name": "Air", "range": "6000-20000Hz", "percent": 18.0},
+        ]
+
+        summary = mix_app.build_summary([slice_data], "Pop", total_duration=30)
+
+        self.assertEqual(summary["verdict"], "polish")
+        self.assertEqual(summary["score_components"]["low_end"], 92)
+        self.assertGreaterEqual(summary["overall_score"], 90)
+
     def test_band_distribution_uses_detailed_mix_bands(self):
         sr = 48000
         samples = mix_app.np.zeros((sr, 2), dtype=mix_app.np.float32)

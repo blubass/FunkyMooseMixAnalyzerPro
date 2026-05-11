@@ -1,4 +1,4 @@
-import os, subprocess, re, wave, contextlib, uuid, glob, time, sqlite3, json, shutil, sys, base64
+import os, subprocess, re, uuid, glob, time, sqlite3, json, shutil, sys, base64
 
 # Ensure common paths are in PATH so ffmpeg can be found from a .app bundle
 os.environ['PATH'] = f"/opt/homebrew/bin:/usr/local/bin:{os.environ.get('PATH', '')}"
@@ -370,6 +370,7 @@ def plugin_report_to_analysis(report, req_id):
         "source": report.get("source") or "Funky Moose Mix Analyzer Plugin",
         "imported_plugin_report": {
             "schemaVersion": report.get("schemaVersion"),
+            "measurementStandard": report.get("measurementStandard"),
             "generatedAt": report.get("generatedAt"),
             "analysisScope": report.get("analysisScope"),
             "plainTextReport": report.get("plainTextReport"),
@@ -454,17 +455,6 @@ from core.advice import (
     get_insights, aggregate_slices, analysis_confidence, build_summary
 )
 
-
-def cut_to_wav(src, out_wav, start=0, duration=30, sr=DEFAULT_SR):
-    cmd = [FFMPEG_CMD, "-hide_banner", "-loglevel", "error"]
-    if start > 0:
-        cmd += ["-ss", str(start)]
-    cmd += ["-t", str(max(duration, 0.1)), "-i", src, "-map", "0:a:0", "-vn", "-ac", "2", "-ar", str(sr), "-sample_fmt", "s16", "-y", out_wav]
-    subprocess.run(cmd, check=True, timeout=PROCESS_TIMEOUT_SECONDS)
-
-def read_wav(path):
-    with contextlib.closing(wave.open(path, 'rb')) as wf:
-        sr = wf.getframerate()
 from core.audio import (
     analyze_slice, loudness_snapshot, ebur128_snapshot, loudnorm_snapshot,
     levels, band_distribution

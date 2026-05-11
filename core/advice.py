@@ -1,12 +1,71 @@
 import numpy as np
 from core.config import get_genre_profile, serialize_genre_profile, BAND_ALIASES
 
+LUFS_OFFSET = -0.691
+
 def in_range(value, value_range):
     return value is not None and value_range[0] <= value <= value_range[1]
 
 def mean_available(values):
     nums = [float(v) for v in values if v is not None and np.isfinite(float(v))]
     return float(np.mean(nums)) if nums else None
+
+def max_available(values, fallback=0.0):
+    nums = [float(v) for v in values if v is not None and np.isfinite(float(v))]
+    return max(nums) if nums else fallback
+
+def duration_weight(slice_data):
+    try:
+        duration = float(slice_data.get("duration", 0))
+        return duration if np.isfinite(duration) and duration > 0 else 1.0
+    except (TypeError, ValueError):
+        return 1.0
+
+def weighted_mean_slices(slices, getter):
+    total_weight = 0.0
+    weighted_sum = 0.0
+    for slice_data in slices:
+        value = getter(slice_data)
+        if value is None:
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not np.isfinite(number):
+            continue
+        weight = duration_weight(slice_data)
+        weighted_sum += number * weight
+        total_weight += weight
+    return weighted_sum / total_weight if total_weight > 0 else None
+
+def lufs_to_power(lufs):
+    if lufs is None:
+        return None
+    try:
+        value = float(lufs)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(value) or value <= -119.0:
+        return None
+    return 10 ** ((value - LUFS_OFFSET) / 10.0)
+
+def power_to_lufs(power):
+    if power is None or power <= 1e-20:
+        return None
+    return float(LUFS_OFFSET + (10.0 * np.log10(power)))
+
+def weighted_lufs_slices(slices):
+    total_weight = 0.0
+    weighted_power = 0.0
+    for slice_data in slices:
+        power = lufs_to_power(slice_data.get("I"))
+        if power is None:
+            continue
+        weight = duration_weight(slice_data)
+        weighted_power += power * weight
+        total_weight += weight
+    return power_to_lufs(weighted_power / total_weight) if total_weight > 0 else None
 
 def band_percent(slice_data, names):
     expanded_names = set(names)
@@ -212,14 +271,14 @@ def get_insights(slices, genre, lang="de", track_loudness=None, is_instrumental=
 
 def aggregate_slices(slices):
     return {
-        "I": mean_available([s.get("I") for s in slices]),
-        "LRA": mean_available([s.get("LRA") for s in slices]),
-        "crest_db": mean_available([s.get("crest_db") for s in slices]),
-        "correlation": mean_available([s.get("correlation") for s in slices]),
-        "low_end_percent": mean_available([band_percent(s, ("Bässe",)) for s in slices]),
-        "presence_percent": mean_available([band_percent(s, ("Mitten",)) for s in slices]),
-        "clipped_percent": mean_available([s.get("quality", {}).get("clipped_percent") for s in slices]),
-        "silence_percent": mean_available([s.get("quality", {}).get("silence_percent") for s in slices]),
+        "I": weighted_lufs_slices(slices),
+        "LRA": weighted_mean_slices(slices, lambda s: s.get("LRA")),
+        "crest_db": weighted_mean_slices(slices, lambda s: s.get("crest_db")),
+        "correlation": weighted_mean_slices(slices, lambda s: s.get("correlation")),
+        "low_end_percent": weighted_mean_slices(slices, lambda s: band_percent(s, ("Bässe",))),
+        "presence_percent": weighted_mean_slices(slices, lambda s: band_percent(s, ("Mitten",))),
+        "clipped_percent": max_available([s.get("quality", {}).get("clipped_percent") for s in slices], 0.0),
+        "silence_percent": weighted_mean_slices(slices, lambda s: s.get("quality", {}).get("silence_percent")),
     }
 
 def analysis_confidence(slices, total_duration):
@@ -301,13 +360,13 @@ def build_summary(slices, genre, total_duration, track_loudness=None):
     def _score_low(low, lo, hi):
         if low is None: return 70
         if lo <= low <= hi: return 100
-        excess = max(abs(low - lo), abs(low - hi))
+        excess = lo - low if low < lo else low - hi
         return max(0, 100 - int(excess * 4))
 
     def _score_crest(cr, lo, hi):
         if cr is None: return 70
         if lo <= cr <= hi: return 100
-        excess = max(abs(cr - lo), abs(cr - hi))
+        excess = lo - cr if cr < lo else cr - hi
         return max(0, 100 - int(excess * 5))
 
     s_lufs  = _score_lufs(lufs_delta)

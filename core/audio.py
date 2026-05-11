@@ -1,8 +1,6 @@
 import os
 import subprocess
 import re
-import wave
-import contextlib
 import json
 import numpy as np
 
@@ -359,21 +357,29 @@ def analyze_transients(samples, sr):
         "percussion_energy_pct": percussion_energy_pct,
     }
 
-def cut_to_wav(ffmpeg_cmd, src, out_wav, start=0, duration=30, sr=DEFAULT_SR):
+def cut_to_f32le(ffmpeg_cmd, src, out_raw, start=0, duration=30, sr=DEFAULT_SR):
     cmd = [ffmpeg_cmd, "-hide_banner", "-loglevel", "error"]
     if start > 0:
         cmd += ["-ss", str(start)]
-    cmd += ["-t", str(max(duration, 0.1)), "-i", src, "-map", "0:a:0", "-vn", "-ac", "2", "-ar", str(sr), "-sample_fmt", "s16", "-y", out_wav]
+    cmd += [
+        "-t", str(max(duration, 0.1)),
+        "-i", src,
+        "-map", "0:a:0",
+        "-vn",
+        "-ac", "2",
+        "-ar", str(sr),
+        "-f", "f32le",
+        "-acodec", "pcm_f32le",
+        "-y", out_raw,
+    ]
     subprocess.run(cmd, check=True, timeout=PROCESS_TIMEOUT_SECONDS)
 
-def read_wav(path):
-    with contextlib.closing(wave.open(path, 'rb')) as wf:
-        sr = wf.getframerate()
-        channels = wf.getnchannels()
-        data = wf.readframes(wf.getnframes())
-    samples = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
-    if channels == 2:
-        samples = samples.reshape(-1, 2)
+def read_f32le(path, sr=DEFAULT_SR, channels=2):
+    samples = np.fromfile(path, dtype="<f4")
+    if channels > 1:
+        usable = (samples.size // channels) * channels
+        samples = samples[:usable].reshape(-1, channels)
+    samples = np.nan_to_num(samples.astype(np.float32, copy=False))
     return sr, samples
 
 def safe_remove(path):
@@ -384,10 +390,10 @@ def safe_remove(path):
         pass
 
 def analyze_slice(ffmpeg_cmd, src, start, duration, tag, req_id, genre, snippet_dir, image_dir):
-    snippet = os.path.join(snippet_dir, f"_snippet_{req_id}_{tag}.wav")
+    snippet = os.path.join(snippet_dir, f"_snippet_{req_id}_{tag}.f32le")
     try:
-        cut_to_wav(ffmpeg_cmd, src, snippet, start=start, duration=duration, sr=DEFAULT_SR)
-        sr, samples = read_wav(snippet)
+        cut_to_f32le(ffmpeg_cmd, src, snippet, start=start, duration=duration, sr=DEFAULT_SR)
+        sr, samples = read_f32le(snippet, sr=DEFAULT_SR, channels=2)
         
         correlation = 1.0
         if len(samples.shape) > 1 and samples.shape[1] == 2:

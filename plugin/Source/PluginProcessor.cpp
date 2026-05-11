@@ -1088,17 +1088,17 @@ void FunkyMooseMixAnalyzerAudioProcessor::processBlock(juce::AudioBuffer<float>&
     }
     processedSamplesSinceReset += static_cast<juce::uint64>(numSamples);
 
-    publishMetric(this->momentaryLufs, powerToLufs(momentaryMeanPower), 0.28f);
-    publishMetric(this->shortTermLufs, shortTermLufsValue, 0.16f);
+    this->momentaryLufs.store(powerToLufs(momentaryMeanPower), std::memory_order_relaxed);
+    this->shortTermLufs.store(shortTermLufsValue, std::memory_order_relaxed);
     if (integratedLoudnessDirty)
     {
-        publishMetric(this->integratedLufs, powerToLufs(calculateIntegratedLoudnessPower()), 0.22f);
+        this->integratedLufs.store(powerToLufs(calculateIntegratedLoudnessPower()), std::memory_order_relaxed);
         integratedLoudnessDirty = false;
     }
     if (shortTermPowerFilled == shortTermPowerRing.size() && shortTermLufsValue > -119.0f)
-        publishMetric(this->lraLu, calculateLraLu(), 0.12f);
+        this->lraLu.store(calculateLraLu(), std::memory_order_relaxed);
 
-    publishMetric(this->truePeakDb, truePeakDbValue, 0.32f);
+    this->truePeakDb.store(truePeakDbValue, std::memory_order_relaxed);
     if (truePeakDbValue > currentTruePeakHold)
         truePeakHoldDb.store(truePeakDbValue, std::memory_order_relaxed);
     updateMaximum(worstTruePeakDb, truePeakDbValue);
@@ -1117,9 +1117,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::processBlock(juce::AudioBuffer<float>&
     publishMetric(this->msRatioDb, 20.0f * std::log10(juce::jmax(msRatio, 1.0e-6f)), 0.08f);
     publishMetric(this->stereoBalanceDb, balance, 0.10f);
     publishMetric(this->dcOffset, static_cast<float>(monoSum / n), 0.06f);
-    publishMetric(this->clippedPercent, clippedPercentValue, 0.04f);
+    this->clippedPercent.store(clippedPercentValue, std::memory_order_relaxed);
     updateMaximum(worstClippedPercent, clippedPercentValue);
-    publishMetric(this->silencePercent, silencePercentValue, 0.04f);
+    this->silencePercent.store(silencePercentValue, std::memory_order_relaxed);
     publishMetric(this->transientDensity, rollingTransientDensity, 1.0f);
     publishMetric(this->attackTimeMs, rollingAttackTimeMs, 1.0f);
     publishMetric(this->percussionEnergyPct, rollingPercussionEnergyPct, 1.0f);

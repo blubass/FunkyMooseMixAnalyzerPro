@@ -4,34 +4,9 @@
 
 namespace
 {
-const juce::Colour background { 0xff101215 };
-const juce::Colour panel { 0xff1b1e24 };
-const juce::Colour border { 0x22ffffff };
-const juce::Colour text { 0xfff4f7fb };
-const juce::Colour muted { 0xffa1a8b3 };
-const juce::Colour teal { 0xff19d3c5 };
-const juce::Colour violet { 0xff8b5cf6 };
-const juce::Colour amber { 0xfff59e0b };
-const juce::Colour danger { 0xffef4444 };
-const juce::Colour success { 0xff22c55e };
-
-constexpr std::array<const char*, fmma::bandCount> bandNames {{
-    "Sub", "Bass", "Low-Mids", "Mids", "Presence", "Air"
-}};
-
 float dbToUnit(float value) noexcept
 {
     return juce::jlimit(0.0f, 1.0f, (value + 60.0f) / 60.0f);
-}
-
-juce::Colour scoreColour(int score) noexcept
-{
-    return score >= 80 ? success : score >= 60 ? amber : danger;
-}
-
-juce::Colour okColour(bool ok) noexcept
-{
-    return ok ? success : amber;
 }
 
 float smoothValue(float current, float target, float amount, float deadband = 0.0f) noexcept
@@ -87,17 +62,9 @@ void setJsonProperty(juce::var& object, const char* name, const juce::var& value
     if (auto* dynamicObject = object.getDynamicObject())
         dynamicObject->setProperty(juce::Identifier(name), value);
 }
-
-float frequencyToUnit(float frequencyHz) noexcept
-{
-    if (! std::isfinite(frequencyHz) || frequencyHz <= 0.0f)
-        return 0.0f;
-
-    const auto logMin = std::log10(20.0f);
-    const auto logMax = std::log10(20000.0f);
-    return juce::jlimit(0.0f, 1.0f, (std::log10(frequencyHz) - logMin) / (logMax - logMin));
 }
-}
+
+using namespace Theme;
 
 FunkyMooseMixAnalyzerAudioProcessorEditor::FunkyMooseMixAnalyzerAudioProcessorEditor(
     FunkyMooseMixAnalyzerAudioProcessor& ownerProcessor)
@@ -230,7 +197,17 @@ FunkyMooseMixAnalyzerAudioProcessorEditor::FunkyMooseMixAnalyzerAudioProcessorEd
 
     genreAttachment = std::make_unique<ComboAttachment>(audioProcessor.parameters, "genre", genreBox);
     instrumentalAttachment = std::make_unique<ButtonAttachment>(audioProcessor.parameters, "instrumental", instrumentalToggle);
-    syncStoredSnapshotsFromProcessor();
+    addAndMakeVisible(summaryComponent);
+    addAndMakeVisible(loudnessCard);
+    addAndMakeVisible(dynamicsCard);
+    addAndMakeVisible(stereoCard);
+    addAndMakeVisible(qualityCard);
+    addAndMakeVisible(toneShapeComponent);
+    addAndMakeVisible(targetsComponent);
+    addAndMakeVisible(actionsComponent);
+    addAndMakeVisible(scoreComponent);
+    addAndMakeVisible(referenceComponent);
+    addAndMakeVisible(snapshotComponent);
 
     setSize(1440, 940);
     startTimerHz(6);
@@ -274,6 +251,201 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
         assessmentCountdown = 1;
         lastGenreIndex = genreIndex;
         lastInstrumentalState = instrumentalState;
+    }
+
+    SummaryComponent::Data summaryData;
+    summaryData.overallScore = assessment.overallScore;
+    summaryData.verdictTitle = assessment.verdictTitle;
+    summaryData.scopeLabel = metrics.hostAutoPassActive ? "Host Recording" : assessment.analysisScope;
+    summaryData.genreGroup = fmma::getGenreProfile(genreIndex).group;
+    summaryData.statusLine = assessment.statusLine;
+    summaryData.confidenceLabel = assessment.confidenceLabel;
+    summaryData.confidenceScore = assessment.confidenceScore;
+    summaryData.durationSeconds = metrics.fullPassCompleted ? metrics.fullPassSeconds : metrics.analysisSeconds;
+    summaryData.lufsDelta = assessment.lufsDelta;
+    
+    auto input = makeAssessmentInput();
+    summaryData.lowEndPercent = input.lowEndPercent;
+    summaryData.presencePercent = input.presencePercent;
+    
+    summaryComponent.update(summaryData);
+
+    MetricsCardComponent::Data loudnessData;
+    loudnessData.title = "Loudness";
+    loudnessData.metrics = {
+        {"Momentary", formatLufs(metrics.momentaryLufs)},
+        {"Short-Term", formatLufs(metrics.shortTermLufs)},
+        {"Integrated", formatLufs(metrics.integratedLufs)},
+        {"LRA", juce::String(metrics.lraLu, 1) + " LU"},
+        {"True Peak", formatDbTp(metrics.truePeakDb)}
+    };
+    loudnessData.barValue = dbToUnit(metrics.truePeakDb);
+    loudnessData.barColour = metrics.truePeakDb > -1.0f ? Theme::danger : Theme::teal;
+    loudnessCard.update(loudnessData);
+
+    MetricsCardComponent::Data dynamicsData;
+    dynamicsData.title = "Dynamics";
+    dynamicsData.metrics = {
+        {"RMS", formatDb(metrics.rmsDb)},
+        {"Sample Peak", formatDb(metrics.peakDb)},
+        {"Crest", formatDb(metrics.crestDb)},
+        {"Trans / Attack", juce::String(metrics.transientDensity, 1) + "/s / " + juce::String(metrics.attackTimeMs, 0) + " ms"},
+        {"Percussion", juce::String(metrics.percussionEnergyPct, 1) + "%"}
+    };
+    dynamicsData.barValue = dbToUnit(metrics.peakDb);
+    dynamicsData.barColour = metrics.peakDb > -1.0f ? Theme::danger : Theme::teal;
+    dynamicsCard.update(dynamicsData);
+
+    MetricsCardComponent::Data stereoData;
+    stereoData.title = "Stereo";
+    stereoData.metrics = {
+        {"Correlation", formatNumber(metrics.correlation, 2)},
+        {"Width", formatNumber(metrics.widthPct, 1) + "%"},
+        {"M/S Ratio", formatDb(metrics.msRatioDb, 2)},
+        {"Mono Loss", formatSigned(metrics.monoLossDb, " dB")},
+        {"Low Phase", "C " + formatNumber(lowEndCorrelationOf(metrics), 2) + " / S " + formatDb(lowEndSideDbOf(metrics), 1)},
+        {"Balance L/R", formatDb(metrics.stereoBalanceDb, 2)}
+    };
+    stereoData.barValue = (metrics.correlation + 1.0f) * 0.5f;
+    stereoData.barColour = (metrics.monoLossDb < -4.0f || metrics.correlation < 0.3f || lowEndCorrelationOf(metrics) < 0.65f) ? Theme::danger
+                         : (metrics.monoLossDb < -2.5f || metrics.correlation < 0.55f || lowEndSideDbOf(metrics) > -6.0f) ? Theme::amber
+                         : Theme::teal;
+    stereoCard.update(stereoData);
+
+    const auto truePeakForSafety = metrics.fullPassCompleted ? juce::jmax(metrics.truePeakDb, metrics.worstTruePeakDb)
+                                                             : metrics.truePeakDb;
+    const auto hasTruePeak = truePeakForSafety > -119.0f && std::isfinite(truePeakForSafety);
+    const auto truePeakMargin = hasTruePeak ? -1.0f - truePeakForSafety : 0.0f;
+
+    MetricsCardComponent::Data qualityData;
+    qualityData.title = "Safety / Delivery";
+    qualityData.metrics = {
+        {"Clipping", juce::String(metrics.clippedPercent, 3) + "%"},
+        {"Worst Clip", juce::String(metrics.worstClippedPercent, 3) + "%"},
+        {"TP Margin", hasTruePeak ? formatSigned(truePeakMargin, " dB") : "N/A"},
+        {"Worst TP", formatDbTp(metrics.worstTruePeakDb)},
+        {"Stream -14", formatDeliveryPreview(-14.0f)},
+        {"Apple -16", formatDeliveryPreview(-16.0f)},
+        {"Broadcast", formatDeliveryPreview(-23.0f)}
+    };
+    qualityData.rowHeight = 14.5f;
+    qualityData.barValue = hasTruePeak ? juce::jlimit(0.0f, 1.0f, (truePeakMargin + 1.0f) / 5.0f) : 0.0f;
+    qualityData.barColour = hasTruePeak ? (truePeakMargin < 0.0f ? Theme::danger : truePeakMargin < 1.0f ? Theme::amber : Theme::success) : Theme::muted;
+    qualityCard.update(qualityData);
+
+    ToneShapeComponent::Data toneShapeData;
+    for (size_t i = 0; i < 6; ++i)
+        toneShapeData.bandPercents[i] = metrics.bandPercents[i];
+    toneShapeData.spectralCentroidHz = metrics.spectralCentroidHz;
+    toneShapeData.spectralRolloffHz = metrics.spectralRolloffHz;
+    toneShapeData.resonanceFreqHz = metrics.resonanceFreqHz;
+    toneShapeData.resonanceGainDb = metrics.resonanceGainDb;
+    toneShapeData.spectralCentroidString = formatHz(metrics.spectralCentroidHz);
+    toneShapeData.spectralRolloffString = formatHz(metrics.spectralRolloffHz);
+    toneShapeData.resonanceString = (metrics.resonanceFreqHz > 0.0f && metrics.resonanceGainDb >= 6.0f)
+                                  ? formatHz(metrics.resonanceFreqHz) + " / +" + juce::String(metrics.resonanceGainDb, 1)
+                                  : "N/A";
+    toneShapeComponent.update(toneShapeData);
+
+    ActionChecklistComponent::Data targetsData;
+    targetsData.title = "Targets";
+    targetsData.fontHeight = 13.0f;
+    targetsData.items = {
+        { assessment.lufsTargetText, Theme::okColour(assessment.lufsOk), 10.0f },
+        { assessment.lowEndTargetText, Theme::okColour(assessment.lowEndOk), 10.0f },
+        { "Low phase: corr >= 0.65, side <= -6 dB", Theme::okColour(assessment.lowEndPhaseOk), 10.0f },
+        { assessment.crestTargetText, Theme::okColour(assessment.crestOk), 10.0f },
+        { assessment.lraTargetText, Theme::okColour(assessment.lraOk), 10.0f },
+        { assessment.correlationTargetText, Theme::okColour(assessment.correlationOk), 10.0f },
+        { "True Peak <= -1.0 dBTP", Theme::okColour(assessment.truePeakOk && assessment.clippingOk), 10.0f }
+    };
+    targetsComponent.update(targetsData);
+
+    ActionChecklistComponent::Data actionsData;
+    actionsData.title = "Priority Actions";
+    actionsData.fontHeight = 14.0f;
+    actionsData.emptyMessage = "Mix meets all target criteria!";
+    actionsData.emptyMessageColour = Theme::success;
+    for (int i = 0; i < assessment.priorityActionCount; ++i)
+    {
+        actionsData.items.push_back({ assessment.priorityActions[static_cast<size_t>(i)], Theme::danger, 8.0f });
+    }
+    actionsComponent.update(actionsData);
+
+    // Score Component
+    ScoreComponent::Data scoreData;
+    scoreData.lufsScore       = assessment.lufsScore;
+    scoreData.correlationScore= assessment.correlationScore;
+    scoreData.lowEndScore     = assessment.lowEndScore;
+    scoreData.crestScore      = assessment.crestScore;
+    scoreData.lraScore        = assessment.lraScore;
+    scoreData.clippingScore   = assessment.clippingScore;
+    scoreData.toneScore       = assessment.toneScore;
+    scoreData.headphoneScore  = assessment.headphoneScore;
+    scoreData.speakerScore    = assessment.speakerScore;
+    scoreData.transientScore  = assessment.transientScore;
+    scoreComponent.update(scoreData);
+
+    // Reference Component
+    {
+        CompareComponent::Data refData;
+        refData.title = "Reference";
+        if (! hasReferenceMetrics)
+        {
+            refData.emptyMessage = "No reference captured.";
+            refData.metrics = {
+                { "State",   referenceCaptureInProgress ? "Recording" : "Empty" },
+                { "Compare", "Unavailable" }
+            };
+        }
+        else
+        {
+            refData.rowHeight = 20.0f;
+            refData.metrics = {
+                { "Ref Time",   formatDuration(referenceMetrics.fullPassSeconds > 0.0f ? referenceMetrics.fullPassSeconds : referenceMetrics.analysisSeconds) },
+                { "LUFS \u0394",      formatSigned(metrics.integratedLufs - referenceMetrics.integratedLufs, " LU") },
+                { "Low-End \u0394",  formatSigned(lowEndOf(metrics) - lowEndOf(referenceMetrics), "%") },
+                { "Presence \u0394", formatSigned(presenceOf(metrics) - presenceOf(referenceMetrics), "%") },
+                { "Crest \u0394",    formatSigned(metrics.crestDb - referenceMetrics.crestDb, " dB") },
+                { "Width \u0394",    formatSigned(metrics.widthPct - referenceMetrics.widthPct, "%") }
+            };
+            refData.noteTitle = "Ref Note";
+            refData.noteText  = referenceNote();
+        }
+        referenceComponent.update(refData);
+    }
+
+    // Snapshot Component
+    {
+        CompareComponent::Data snapData;
+        snapData.title = "A/B Snapshots";
+        if (! hasSnapshotA || ! hasSnapshotB)
+        {
+            snapData.rowHeight = 22.0f;
+            snapData.metrics = {
+                { "Snapshot A", hasSnapshotA ? "Stored" : "Empty" },
+                { "Snapshot B", hasSnapshotB ? "Stored" : "Empty" },
+                { "Compare",   hasSnapshotA || hasSnapshotB ? "Waiting" : "Unavailable" }
+            };
+            snapData.noteTitle = "A/B Note";
+            snapData.noteText  = snapshotNote();
+        }
+        else
+        {
+            snapData.rowHeight = 20.0f;
+            snapData.metrics = {
+                { "A Time",   formatDuration(snapshotA.fullPassSeconds > 0.0f ? snapshotA.fullPassSeconds : snapshotA.analysisSeconds) },
+                { "B Time",   formatDuration(snapshotB.fullPassSeconds > 0.0f ? snapshotB.fullPassSeconds : snapshotB.analysisSeconds) },
+                { "LUFS B-A", formatSigned(snapshotB.integratedLufs - snapshotA.integratedLufs, " LU") },
+                { "TP B-A",   formatSigned(snapshotB.truePeakDb - snapshotA.truePeakDb, " dB") },
+                { "Low B-A",  formatSigned(lowEndOf(snapshotB) - lowEndOf(snapshotA), "%") },
+                { "Crest B-A",formatSigned(snapshotB.crestDb - snapshotA.crestDb, " dB") },
+                { "Width B-A",formatSigned(snapshotB.widthPct - snapshotA.widthPct, "%") }
+            };
+            snapData.noteTitle = "A/B Note";
+            snapData.noteText  = snapshotNote();
+        }
+        snapshotComponent.update(snapData);
     }
 
     repaint();
@@ -581,116 +753,22 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::paint(juce::Graphics& g)
                juce::Justification::centredLeft);
 
     bounds.removeFromTop(14.0f);
-    drawSummary(g, bounds.removeFromTop(124.0f));
+    bounds.removeFromTop(124.0f); // Reserve space for summaryComponent
 
     bounds.removeFromTop(18.0f);
-    auto rowOne = bounds.removeFromTop(190.0f);
-    const auto third = (rowOne.getWidth() - 48.0f) / 3.0f;
-    auto loudness = rowOne.removeFromLeft(third);
-    rowOne.removeFromLeft(24.0f);
-    auto dynamics = rowOne.removeFromLeft(third);
-    rowOne.removeFromLeft(24.0f);
-    auto stereo = rowOne;
-
-    drawCard(g, loudness, "Loudness");
-    auto loudnessInner = loudness.reduced(18.0f);
-    loudnessInner.removeFromTop(34.0f);
-    auto loudnessBar = loudnessInner.removeFromBottom(18.0f);
-    drawMetric(g, loudnessInner.removeFromTop(20.0f), "Momentary", formatLufs(metrics.momentaryLufs));
-    drawMetric(g, loudnessInner.removeFromTop(20.0f), "Short-Term", formatLufs(metrics.shortTermLufs));
-    drawMetric(g, loudnessInner.removeFromTop(20.0f), "Integrated", formatLufs(metrics.integratedLufs));
-    drawMetric(g, loudnessInner.removeFromTop(20.0f), "LRA", juce::String(metrics.lraLu, 1) + " LU");
-    drawMetric(g, loudnessInner.removeFromTop(20.0f), "True Peak", formatDbTp(metrics.truePeakDb));
-    drawBar(g, loudnessBar, dbToUnit(metrics.truePeakDb),
-            metrics.truePeakDb > -1.0f ? danger : teal);
-
-    drawCard(g, dynamics, "Dynamics");
-    auto dynInner = dynamics.reduced(18.0f);
-    dynInner.removeFromTop(34.0f);
-    auto dynBar = dynInner.removeFromBottom(18.0f);
-    drawMetric(g, dynInner.removeFromTop(20.0f), "RMS", formatDb(metrics.rmsDb));
-    drawMetric(g, dynInner.removeFromTop(20.0f), "Sample Peak", formatDb(metrics.peakDb));
-    drawMetric(g, dynInner.removeFromTop(20.0f), "Crest", formatDb(metrics.crestDb));
-    drawMetric(g, dynInner.removeFromTop(20.0f), "Trans / Attack",
-               juce::String(metrics.transientDensity, 1) + "/s / " + juce::String(metrics.attackTimeMs, 0) + " ms");
-    drawMetric(g, dynInner.removeFromTop(20.0f), "Percussion", juce::String(metrics.percussionEnergyPct, 1) + "%");
-    drawBar(g, dynBar, dbToUnit(metrics.peakDb),
-            metrics.peakDb > -1.0f ? danger : teal);
-
-    drawCard(g, stereo, "Stereo");
-    auto stereoInner = stereo.reduced(18.0f);
-    stereoInner.removeFromTop(34.0f);
-    auto stereoBar = stereoInner.removeFromBottom(18.0f);
-    drawMetric(g, stereoInner.removeFromTop(20.0f), "Correlation", formatNumber(metrics.correlation, 2));
-    drawMetric(g, stereoInner.removeFromTop(20.0f), "Width", formatNumber(metrics.widthPct, 1) + "%");
-    drawMetric(g, stereoInner.removeFromTop(20.0f), "M/S Ratio", formatDb(metrics.msRatioDb, 2));
-    drawMetric(g, stereoInner.removeFromTop(20.0f), "Mono Loss", formatSigned(metrics.monoLossDb, " dB"));
-    drawMetric(g, stereoInner.removeFromTop(20.0f), "Low Phase",
-               "C " + formatNumber(lowEndCorrelationOf(metrics), 2)
-                   + " / S " + formatDb(lowEndSideDbOf(metrics), 1));
-    drawMetric(g, stereoInner.removeFromTop(20.0f), "Balance L/R", formatDb(metrics.stereoBalanceDb, 2));
-    drawBar(g, stereoBar, (metrics.correlation + 1.0f) * 0.5f,
-            metrics.monoLossDb < -4.0f || metrics.correlation < 0.3f || lowEndCorrelationOf(metrics) < 0.65f ? danger
-                : metrics.monoLossDb < -2.5f || metrics.correlation < 0.55f || lowEndSideDbOf(metrics) > -6.0f ? amber
-                                                                                                                : teal);
+    bounds.removeFromTop(190.0f); // Space for metrics cards
 
     bounds.removeFromTop(18.0f);
-    auto rowTwo = bounds.removeFromTop(190.0f);
-    auto targets = rowTwo.removeFromLeft(third);
-    rowTwo.removeFromLeft(24.0f);
-    auto quality = rowTwo.removeFromLeft(third);
-    rowTwo.removeFromLeft(24.0f);
-    auto bands = rowTwo;
-
-    drawTargetChecklist(g, targets);
-
-    drawCard(g, quality, "Safety / Delivery");
-    auto qualityInner = quality.reduced(18.0f);
-    qualityInner.removeFromTop(34.0f);
-    auto qualityBar = qualityInner.removeFromBottom(18.0f);
-    const auto truePeakForSafety = metrics.fullPassCompleted ? juce::jmax(metrics.truePeakDb, metrics.worstTruePeakDb)
-                                                             : metrics.truePeakDb;
-    const auto hasTruePeak = truePeakForSafety > -119.0f && std::isfinite(truePeakForSafety);
-    const auto truePeakMargin = hasTruePeak ? -1.0f - truePeakForSafety : 0.0f;
-    constexpr auto safetyRowHeight = 14.5f;
-    drawMetric(g, qualityInner.removeFromTop(safetyRowHeight), "Clipping", juce::String(metrics.clippedPercent, 3) + "%");
-    drawMetric(g, qualityInner.removeFromTop(safetyRowHeight), "Worst Clip", juce::String(metrics.worstClippedPercent, 3) + "%");
-    drawMetric(g, qualityInner.removeFromTop(safetyRowHeight), "TP Margin", hasTruePeak ? formatSigned(truePeakMargin, " dB") : "N/A");
-    drawMetric(g, qualityInner.removeFromTop(safetyRowHeight), "Worst TP", formatDbTp(metrics.worstTruePeakDb));
-    drawMetric(g, qualityInner.removeFromTop(safetyRowHeight), "Stream -14", formatDeliveryPreview(-14.0f));
-    drawMetric(g, qualityInner.removeFromTop(safetyRowHeight), "Apple -16", formatDeliveryPreview(-16.0f));
-    drawMetric(g, qualityInner.removeFromTop(safetyRowHeight), "Broadcast", formatDeliveryPreview(-23.0f));
-    drawBar(g, qualityBar,
-            hasTruePeak ? juce::jlimit(0.0f, 1.0f, (truePeakMargin + 1.0f) / 5.0f) : 0.0f,
-            hasTruePeak ? (truePeakMargin < 0.0f ? danger : truePeakMargin < 1.0f ? amber : success) : muted);
-
-    drawCard(g, bands, "Tone Shape");
-    auto toneInner = bands.reduced(18.0f);
-    toneInner.removeFromTop(34.0f);
-    drawToneShape(g, toneInner);
+    bounds.removeFromTop(190.0f);
 
     bounds.removeFromTop(18.0f);
-    auto bottom = bounds;
-    const auto bottomGap = 18.0f;
-    const auto availableBottomWidth = bounds.getWidth() - (bottomGap * 3.0f);
-    const auto scoreWidth = availableBottomWidth * 0.29f;
-    const auto referenceWidth = availableBottomWidth * 0.23f;
-    const auto snapshotWidth = availableBottomWidth * 0.23f;
-    auto scoreBox = bottom.removeFromLeft(scoreWidth);
-    bottom.removeFromLeft(bottomGap);
-    auto referenceBox = bottom.removeFromLeft(referenceWidth);
-    bottom.removeFromLeft(bottomGap);
-    auto snapshotBox = bottom.removeFromLeft(snapshotWidth);
-    bottom.removeFromLeft(bottomGap);
-    drawScoreComponents(g, scoreBox);
-    drawReferenceCompare(g, referenceBox);
-    drawSnapshotCompare(g, snapshotBox);
-    drawPriorityActions(g, bottom);
+    bounds.removeFromTop(190.0f);
 }
 
 void FunkyMooseMixAnalyzerAudioProcessorEditor::resized()
 {
-    auto header = getLocalBounds().reduced(24).removeFromTop(34);
+    auto bounds = getLocalBounds().reduced(24);
+    auto header = bounds.removeFromTop(34);
     auto controls = header.removeFromRight(1080);
     genreLabel.setBounds(controls.removeFromLeft(80));
     genreBox.setBounds(controls.removeFromLeft(170).reduced(0, 1));
@@ -714,370 +792,43 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::resized()
     copyButton.setBounds(controls.removeFromLeft(72).reduced(0, 1));
     controls.removeFromLeft(7);
     copyJsonButton.setBounds(controls.removeFromLeft(82).reduced(0, 1));
+
+    bounds.removeFromTop(14); // Space between header and summary
+    summaryComponent.setBounds(bounds.removeFromTop(124));
+
+    bounds.removeFromTop(18);
+    auto rowOne = bounds.removeFromTop(190);
+    const auto third = (rowOne.getWidth() - 48) / 3;
+    loudnessCard.setBounds(rowOne.removeFromLeft(third));
+    rowOne.removeFromLeft(24);
+    dynamicsCard.setBounds(rowOne.removeFromLeft(third));
+    rowOne.removeFromLeft(24);
+    stereoCard.setBounds(rowOne);
+
+    auto rowTwo = bounds.removeFromTop(190);
+    const auto thirdRowTwo = (rowTwo.getWidth() - 48) / 3;
+    targetsComponent.setBounds(rowTwo.removeFromLeft(thirdRowTwo));
+    rowTwo.removeFromLeft(24);
+    qualityCard.setBounds(rowTwo.removeFromLeft(thirdRowTwo));
+    rowTwo.removeFromLeft(24);
+    toneShapeComponent.setBounds(rowTwo);
+
+    bounds.removeFromTop(18);
+    auto bottom = bounds;
+    const auto bottomGap = 18;
+    const auto availableBottomWidth = bottom.getWidth() - (bottomGap * 3);
+    const auto scoreWidth = static_cast<int>(availableBottomWidth * 0.29f);
+    const auto referenceWidth = static_cast<int>(availableBottomWidth * 0.23f);
+    const auto snapshotWidth = static_cast<int>(availableBottomWidth * 0.23f);
+    scoreComponent.setBounds(bottom.removeFromLeft(scoreWidth));
+    bottom.removeFromLeft(bottomGap);
+    referenceComponent.setBounds(bottom.removeFromLeft(referenceWidth));
+    bottom.removeFromLeft(bottomGap);
+    snapshotComponent.setBounds(bottom.removeFromLeft(snapshotWidth));
+    bottom.removeFromLeft(bottomGap);
+    actionsComponent.setBounds(bottom);
 }
 
-void FunkyMooseMixAnalyzerAudioProcessorEditor::drawSummary(juce::Graphics& g,
-                                                            juce::Rectangle<float> area)
-{
-    drawCard(g, area, "Live Summary");
-
-    auto inner = area.reduced(18.0f);
-    inner.removeFromTop(26.0f);
-    auto scoreArea = inner.removeFromLeft(128.0f);
-    auto details = inner;
-    const auto colour = scoreColour(assessment.overallScore);
-
-    g.setColour(colour.withAlpha(0.12f));
-    g.fillRoundedRectangle(scoreArea.reduced(0.0f, 3.0f), 8.0f);
-    g.setColour(colour);
-    g.setFont(juce::FontOptions(42.0f, juce::Font::bold));
-    g.drawText(juce::String(assessment.overallScore), scoreArea.removeFromTop(48.0f), juce::Justification::centred);
-    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-    g.drawText("MIX SCORE", scoreArea, juce::Justification::centred);
-
-    details.removeFromLeft(18.0f);
-    auto topLine = details.removeFromTop(24.0f);
-    g.setColour(colour);
-    g.setFont(juce::FontOptions(19.0f, juce::Font::bold));
-    g.drawText(assessment.verdictTitle, topLine.removeFromLeft(170.0f), juce::Justification::centredLeft);
-    g.setColour(muted);
-    g.setFont(juce::FontOptions(13.0f));
-    const auto scopeLabel = metrics.hostAutoPassActive ? juce::String("Host Recording") : assessment.analysisScope;
-    g.drawText(scopeLabel + " / " + fmma::getGenreProfile(genreBox.getSelectedItemIndex()).group,
-               topLine,
-               juce::Justification::centredLeft);
-
-    g.setColour(text);
-    g.setFont(juce::FontOptions(14.0f));
-    g.drawText(assessment.statusLine, details.removeFromTop(20.0f), juce::Justification::centredLeft);
-
-    auto chips = details.removeFromTop(22.0f);
-    const auto input = makeAssessmentInput();
-    const auto duration = metrics.fullPassCompleted ? metrics.fullPassSeconds : metrics.analysisSeconds;
-    drawMetric(g, chips.removeFromLeft(180.0f), "Confidence",
-               assessment.confidenceLabel + " " + juce::String(assessment.confidenceScore));
-    drawMetric(g, chips.removeFromLeft(150.0f), "Time", formatDuration(duration));
-    drawMetric(g, chips.removeFromLeft(170.0f), "LUFS delta", juce::String(assessment.lufsDelta, 1));
-    drawMetric(g, chips.removeFromLeft(170.0f), "Low-end", juce::String(input.lowEndPercent, 1) + "%");
-    drawMetric(g, chips.removeFromLeft(170.0f), "Presence", juce::String(input.presencePercent, 1) + "%");
-}
-
-void FunkyMooseMixAnalyzerAudioProcessorEditor::drawCard(juce::Graphics& g,
-                                                         juce::Rectangle<float> area,
-                                                         const juce::String& title)
-{
-    g.setColour(panel);
-    g.fillRoundedRectangle(area, 8.0f);
-    g.setColour(border);
-    g.drawRoundedRectangle(area, 8.0f, 1.0f);
-    g.setColour(text);
-    g.setFont(juce::FontOptions(17.0f, juce::Font::bold));
-    g.drawText(title, area.reduced(18.0f).removeFromTop(24.0f), juce::Justification::centredLeft);
-}
-
-void FunkyMooseMixAnalyzerAudioProcessorEditor::drawMetric(juce::Graphics& g,
-                                                           juce::Rectangle<float> area,
-                                                           const juce::String& label,
-                                                           const juce::String& value)
-{
-    g.setFont(juce::FontOptions(13.0f));
-    g.setColour(muted);
-    g.drawText(label, area.removeFromLeft(area.getWidth() * 0.56f), juce::Justification::centredLeft);
-    g.setColour(text);
-    g.drawText(value, area, juce::Justification::centredRight);
-}
-
-void FunkyMooseMixAnalyzerAudioProcessorEditor::drawBar(juce::Graphics& g,
-                                                        juce::Rectangle<float> area,
-                                                        float normalised,
-                                                        juce::Colour colour)
-{
-    area = area.withHeight(10.0f).withCentre(area.getCentre());
-    g.setColour(juce::Colours::black.withAlpha(0.35f));
-    g.fillRoundedRectangle(area, 5.0f);
-    g.setColour(colour);
-    g.fillRoundedRectangle(area.withWidth(area.getWidth() * juce::jlimit(0.0f, 1.0f, normalised)), 5.0f);
-}
-
-void FunkyMooseMixAnalyzerAudioProcessorEditor::drawToneShape(juce::Graphics& g,
-                                                              juce::Rectangle<float> area)
-{
-    auto graph = area.removeFromTop(82.0f);
-    auto labelStrip = graph.removeFromBottom(15.0f);
-    auto plot = graph.reduced(0.0f, 2.0f);
-
-    g.setColour(juce::Colours::black.withAlpha(0.22f));
-    g.fillRoundedRectangle(plot, 6.0f);
-    g.setColour(border);
-    g.drawRoundedRectangle(plot, 6.0f, 1.0f);
-
-    for (auto i = 1; i < 4; ++i)
-    {
-        const auto y = plot.getY() + (plot.getHeight() * static_cast<float>(i) / 4.0f);
-        g.setColour(juce::Colours::white.withAlpha(0.08f));
-        g.drawHorizontalLine(static_cast<int>(std::round(y)), plot.getX(), plot.getRight());
-    }
-
-    juce::Path fillPath;
-    juce::Path linePath;
-    const auto step = plot.getWidth() / static_cast<float>(fmma::bandCount - 1);
-
-    for (auto band = 0; band < fmma::bandCount; ++band)
-    {
-        const auto value = juce::jlimit(0.0f, 1.0f, metrics.bandPercents[static_cast<size_t>(band)] / 45.0f);
-        const auto x = plot.getX() + (static_cast<float>(band) * step);
-        const auto y = plot.getBottom() - (value * plot.getHeight());
-
-        if (band == 0)
-        {
-            linePath.startNewSubPath(x, y);
-            fillPath.startNewSubPath(x, plot.getBottom());
-            fillPath.lineTo(x, y);
-        }
-        else
-        {
-            linePath.lineTo(x, y);
-            fillPath.lineTo(x, y);
-        }
-
-        g.setColour((band < 2 ? teal : band < 4 ? violet : amber).withAlpha(0.88f));
-        g.fillEllipse(juce::Rectangle<float> { x - 3.0f, y - 3.0f, 6.0f, 6.0f });
-    }
-
-    fillPath.lineTo(plot.getRight(), plot.getBottom());
-    fillPath.closeSubPath();
-    g.setColour(teal.withAlpha(0.14f));
-    g.fillPath(fillPath);
-    g.setColour(teal);
-    g.strokePath(linePath, juce::PathStrokeType(2.0f));
-
-    const auto drawFrequencyMarker = [&] (float frequencyHz, juce::Colour colour, const juce::String& label)
-    {
-        if (! std::isfinite(frequencyHz) || frequencyHz <= 0.0f)
-            return;
-
-        const auto x = plot.getX() + (frequencyToUnit(frequencyHz) * plot.getWidth());
-        g.setColour(colour.withAlpha(0.75f));
-        g.drawVerticalLine(static_cast<int>(std::round(x)), plot.getY(), plot.getBottom());
-        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
-        g.drawFittedText(label, juce::Rectangle<int> { static_cast<int>(x) + 3,
-                                                       static_cast<int>(plot.getY()) + 2,
-                                                       54,
-                                                       12 },
-                         juce::Justification::centredLeft,
-                         1);
-    };
-
-    drawFrequencyMarker(metrics.spectralCentroidHz, teal, "C");
-    drawFrequencyMarker(metrics.spectralRolloffHz, amber, "R");
-    if (metrics.resonanceFreqHz > 0.0f && metrics.resonanceGainDb >= 6.0f)
-        drawFrequencyMarker(metrics.resonanceFreqHz, danger, "Res");
-
-    const auto labelWidth = labelStrip.getWidth() / static_cast<float>(fmma::bandCount);
-    for (auto band = 0; band < fmma::bandCount; ++band)
-    {
-        auto labelArea = labelStrip.removeFromLeft(labelWidth);
-        g.setColour(muted);
-        g.setFont(juce::FontOptions(9.5f));
-        g.drawText(bandNames[static_cast<size_t>(band)], labelArea, juce::Justification::centred);
-    }
-
-    area.removeFromTop(8.0f);
-    drawMetric(g, area.removeFromTop(18.0f), "Centroid", formatHz(metrics.spectralCentroidHz));
-    drawMetric(g, area.removeFromTop(18.0f), "Rolloff", formatHz(metrics.spectralRolloffHz));
-    drawMetric(g, area.removeFromTop(18.0f), "Resonance",
-               metrics.resonanceFreqHz > 0.0f && metrics.resonanceGainDb >= 6.0f
-                    ? formatHz(metrics.resonanceFreqHz) + " / +" + juce::String(metrics.resonanceGainDb, 1)
-                    : "N/A");
-}
-
-void FunkyMooseMixAnalyzerAudioProcessorEditor::drawTargetChecklist(juce::Graphics& g,
-                                                                    juce::Rectangle<float> area)
-{
-    drawCard(g, area, "Targets");
-    auto inner = area.reduced(18.0f);
-    inner.removeFromTop(34.0f);
-
-    const std::array<std::pair<juce::String, bool>, 7> rows {{
-        { assessment.lufsTargetText, assessment.lufsOk },
-        { assessment.lowEndTargetText, assessment.lowEndOk },
-        { "Low phase: corr >= 0.65, side <= -6 dB", assessment.lowEndPhaseOk },
-        { assessment.crestTargetText, assessment.crestOk },
-        { assessment.lraTargetText, assessment.lraOk },
-        { assessment.correlationTargetText, assessment.correlationOk },
-        { "True Peak <= -1.0 dBTP", assessment.truePeakOk && assessment.clippingOk },
-    }};
-
-    for (const auto& row : rows)
-    {
-        auto line = inner.removeFromTop(16.7f);
-        g.setColour(okColour(row.second));
-        g.fillEllipse(line.removeFromLeft(10.0f).reduced(1.0f));
-        line.removeFromLeft(8.0f);
-        g.setColour(row.second ? text : amber);
-        g.setFont(juce::FontOptions(12.0f));
-        g.drawText(row.first, line, juce::Justification::centredLeft);
-    }
-}
-
-void FunkyMooseMixAnalyzerAudioProcessorEditor::drawScoreComponents(juce::Graphics& g,
-                                                                    juce::Rectangle<float> area)
-{
-    drawCard(g, area, "Score Components");
-    auto inner = area.reduced(18.0f);
-    inner.removeFromTop(34.0f);
-
-    const std::array<std::pair<const char*, int>, 10> rows {{
-        { "LUFS", assessment.lufsScore },
-        { "Correlation", assessment.correlationScore },
-        { "Low-End", assessment.lowEndScore },
-        { "Crest", assessment.crestScore },
-        { "LRA", assessment.lraScore },
-        { "Clipping", assessment.clippingScore },
-        { "Tone", assessment.toneScore },
-        { "Headphones", assessment.headphoneScore },
-        { "Speakers", assessment.speakerScore },
-        { "Transients", assessment.transientScore },
-    }};
-
-    auto leftColumn = inner.removeFromLeft((inner.getWidth() - 14.0f) * 0.5f);
-    inner.removeFromLeft(14.0f);
-    auto rightColumn = inner;
-    const auto rowsPerColumn = (rows.size() + size_t { 1 }) / size_t { 2 };
-
-    for (auto i = size_t { 0 }; i < rows.size(); ++i)
-    {
-        auto& column = i < rowsPerColumn ? leftColumn : rightColumn;
-        const auto& row = rows[i];
-        auto line = column.removeFromTop(22.0f);
-        auto label = line.removeFromLeft(72.0f);
-        auto value = line.removeFromRight(34.0f);
-        g.setColour(muted);
-        g.setFont(juce::FontOptions(11.0f));
-        g.drawText(row.first, label, juce::Justification::centredLeft);
-        g.setColour(scoreColour(row.second));
-        g.drawText(juce::String(row.second), value, juce::Justification::centredRight);
-        drawBar(g, line.reduced(8.0f, 0.0f), static_cast<float>(row.second) / 100.0f, scoreColour(row.second));
-    }
-}
-
-void FunkyMooseMixAnalyzerAudioProcessorEditor::drawReferenceCompare(juce::Graphics& g,
-                                                                     juce::Rectangle<float> area)
-{
-    drawCard(g, area, "Reference");
-    auto inner = area.reduced(18.0f);
-    inner.removeFromTop(34.0f);
-
-    if (! hasReferenceMetrics)
-    {
-        g.setColour(muted);
-        g.setFont(juce::FontOptions(13.0f));
-        g.drawText("No reference captured.", inner.removeFromTop(24.0f), juce::Justification::centredLeft);
-        drawMetric(g, inner.removeFromTop(22.0f), "State",
-                   referenceCaptureInProgress ? "Recording" : "Empty");
-        drawMetric(g, inner.removeFromTop(22.0f), "Compare", "Unavailable");
-        return;
-    }
-
-    const auto lufsDelta = metrics.integratedLufs - referenceMetrics.integratedLufs;
-    const auto lowDelta = lowEndOf(metrics) - lowEndOf(referenceMetrics);
-    const auto presenceDelta = presenceOf(metrics) - presenceOf(referenceMetrics);
-    const auto crestDelta = metrics.crestDb - referenceMetrics.crestDb;
-    const auto widthDelta = metrics.widthPct - referenceMetrics.widthPct;
-
-    drawMetric(g, inner.removeFromTop(20.0f), "Ref Time",
-               formatDuration(referenceMetrics.fullPassSeconds > 0.0f ? referenceMetrics.fullPassSeconds
-                                                                       : referenceMetrics.analysisSeconds));
-    drawMetric(g, inner.removeFromTop(20.0f), "LUFS Δ", formatSigned(lufsDelta, " LU"));
-    drawMetric(g, inner.removeFromTop(20.0f), "Low-End Δ", formatSigned(lowDelta, "%"));
-    drawMetric(g, inner.removeFromTop(20.0f), "Presence Δ", formatSigned(presenceDelta, "%"));
-    drawMetric(g, inner.removeFromTop(20.0f), "Crest Δ", formatSigned(crestDelta, " dB"));
-    drawMetric(g, inner.removeFromTop(20.0f), "Width Δ", formatSigned(widthDelta, "%"));
-
-    inner.removeFromTop(4.0f);
-    g.setColour(teal);
-    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-    g.drawText("Ref Note", inner.removeFromTop(18.0f), juce::Justification::centredLeft);
-    g.setColour(text);
-    g.setFont(juce::FontOptions(12.0f));
-    g.drawFittedText(referenceNote(), inner.toNearestInt(), juce::Justification::centredLeft, 2);
-}
-
-void FunkyMooseMixAnalyzerAudioProcessorEditor::drawSnapshotCompare(juce::Graphics& g,
-                                                                    juce::Rectangle<float> area)
-{
-    drawCard(g, area, "A/B Snapshots");
-    auto inner = area.reduced(18.0f);
-    inner.removeFromTop(34.0f);
-
-    if (! hasSnapshotA || ! hasSnapshotB)
-    {
-        drawMetric(g, inner.removeFromTop(22.0f), "Snapshot A", hasSnapshotA ? "Stored" : "Empty");
-        drawMetric(g, inner.removeFromTop(22.0f), "Snapshot B", hasSnapshotB ? "Stored" : "Empty");
-        drawMetric(g, inner.removeFromTop(22.0f), "Compare", hasSnapshotA || hasSnapshotB ? "Waiting" : "Unavailable");
-
-        inner.removeFromTop(8.0f);
-        g.setColour(teal);
-        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-        g.drawText("A/B Note", inner.removeFromTop(18.0f), juce::Justification::centredLeft);
-        g.setColour(text);
-        g.setFont(juce::FontOptions(12.0f));
-        g.drawFittedText(snapshotNote(), inner.toNearestInt(), juce::Justification::centredLeft, 2);
-        return;
-    }
-
-    drawMetric(g, inner.removeFromTop(20.0f), "A Time",
-               formatDuration(snapshotA.fullPassSeconds > 0.0f ? snapshotA.fullPassSeconds
-                                                                : snapshotA.analysisSeconds));
-    drawMetric(g, inner.removeFromTop(20.0f), "B Time",
-               formatDuration(snapshotB.fullPassSeconds > 0.0f ? snapshotB.fullPassSeconds
-                                                                : snapshotB.analysisSeconds));
-    drawMetric(g, inner.removeFromTop(20.0f), "LUFS B-A",
-               formatSigned(snapshotB.integratedLufs - snapshotA.integratedLufs, " LU"));
-    drawMetric(g, inner.removeFromTop(20.0f), "TP B-A",
-               formatSigned(snapshotB.truePeakDb - snapshotA.truePeakDb, " dB"));
-    drawMetric(g, inner.removeFromTop(20.0f), "Low B-A",
-               formatSigned(lowEndOf(snapshotB) - lowEndOf(snapshotA), "%"));
-    drawMetric(g, inner.removeFromTop(20.0f), "Crest B-A",
-               formatSigned(snapshotB.crestDb - snapshotA.crestDb, " dB"));
-    drawMetric(g, inner.removeFromTop(20.0f), "Width B-A",
-               formatSigned(snapshotB.widthPct - snapshotA.widthPct, "%"));
-
-    inner.removeFromTop(4.0f);
-    g.setColour(teal);
-    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-    g.drawText("A/B Note", inner.removeFromTop(18.0f), juce::Justification::centredLeft);
-    g.setColour(text);
-    g.setFont(juce::FontOptions(12.0f));
-    g.drawFittedText(snapshotNote(), inner.toNearestInt(), juce::Justification::centredLeft, 2);
-}
-
-void FunkyMooseMixAnalyzerAudioProcessorEditor::drawPriorityActions(juce::Graphics& g,
-                                                                    juce::Rectangle<float> area)
-{
-    drawCard(g, area, "Priority Actions");
-    auto inner = area.reduced(18.0f);
-    inner.removeFromTop(34.0f);
-
-    const auto refAction = referenceActionNote();
-    const auto rowCount = juce::jmax(1, assessment.priorityActionCount + (refAction.isNotEmpty() ? 1 : 0));
-    const auto rowHeight = juce::jmin(36.0f, inner.getHeight() / static_cast<float>(rowCount));
-    for (auto i = 0; i < rowCount; ++i)
-    {
-        const auto action = i < assessment.priorityActionCount
-            ? assessment.priorityActions[static_cast<size_t>(i)]
-            : refAction.isNotEmpty()
-                ? refAction
-            : juce::String("Play audio to generate live recommendations.");
-        auto line = inner.removeFromTop(rowHeight);
-        g.setColour(i == 0 ? teal : muted);
-        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-        g.drawText(juce::String(i + 1) + ".", line.removeFromLeft(24.0f), juce::Justification::centredLeft);
-        g.setColour(text);
-        g.setFont(juce::FontOptions(12.0f));
-        g.drawFittedText(action, line.toNearestInt(), juce::Justification::centredLeft, 2);
-    }
-}
 
 void FunkyMooseMixAnalyzerAudioProcessorEditor::copyReportToClipboard()
 {
@@ -1152,7 +903,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport() const
     {
         if (i > 0)
             report << ", ";
-        report << bandNames[static_cast<size_t>(i)] << " "
+        report << fmma::bandNames[static_cast<size_t>(i)] << " "
                << juce::String(metrics.bandPercents[static_cast<size_t>(i)], 1) << "%";
     }
     report << "\n";
@@ -1161,7 +912,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport() const
     {
         if (i > 0)
             report << ", ";
-        report << bandNames[static_cast<size_t>(i)] << " corr "
+        report << fmma::bandNames[static_cast<size_t>(i)] << " corr "
                << juce::String(metrics.bandCorrelations[static_cast<size_t>(i)], 2)
                << " / side " << juce::String(metrics.bandSideRatiosDb[static_cast<size_t>(i)], 1) << " dB";
     }
@@ -1357,7 +1108,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport() const
     {
         const auto index = static_cast<size_t>(i);
         juce::var band { new juce::DynamicObject() };
-        setJsonProperty(band, "name", bandNames[index]);
+        setJsonProperty(band, "name", fmma::bandNames[index]);
         setJsonProperty(band, "percent", jsonNumber(metrics.bandPercents[index]));
         setJsonProperty(band, "correlation", jsonNumber(metrics.bandCorrelations[index]));
         setJsonProperty(band, "sideRatioDb", jsonAudioNumber(metrics.bandSideRatiosDb[index]));

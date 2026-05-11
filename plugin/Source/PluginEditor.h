@@ -1,6 +1,13 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "UI/Theme.h"
+#include "UI/SummaryComponent.h"
+#include "UI/MetricsCardComponent.h"
+#include "UI/ToneShapeComponent.h"
+#include "UI/ActionChecklistComponent.h"
+#include "UI/ScoreComponent.h"
+#include "UI/CompareComponent.h"
 
 class FunkyMooseMixAnalyzerAudioProcessorEditor final : public juce::AudioProcessorEditor,
                                                         private juce::Timer
@@ -17,16 +24,6 @@ private:
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
     void timerCallback() override;
-    void drawCard(juce::Graphics& g, juce::Rectangle<float> area, const juce::String& title);
-    void drawSummary(juce::Graphics& g, juce::Rectangle<float> area);
-    void drawMetric(juce::Graphics& g, juce::Rectangle<float> area, const juce::String& label, const juce::String& value);
-    void drawBar(juce::Graphics& g, juce::Rectangle<float> area, float normalised, juce::Colour colour);
-    void drawToneShape(juce::Graphics& g, juce::Rectangle<float> area);
-    void drawTargetChecklist(juce::Graphics& g, juce::Rectangle<float> area);
-    void drawScoreComponents(juce::Graphics& g, juce::Rectangle<float> area);
-    void drawReferenceCompare(juce::Graphics& g, juce::Rectangle<float> area);
-    void drawSnapshotCompare(juce::Graphics& g, juce::Rectangle<float> area);
-    void drawPriorityActions(juce::Graphics& g, juce::Rectangle<float> area);
     void copyReportToClipboard();
     void copyJsonReportToClipboard();
     juce::String buildTextReport() const;
@@ -77,6 +74,18 @@ private:
     juce::TextButton copyJsonButton;
     std::unique_ptr<ComboAttachment> genreAttachment;
     std::unique_ptr<ButtonAttachment> instrumentalAttachment;
+
+    SummaryComponent summaryComponent;
+    MetricsCardComponent loudnessCard;
+    MetricsCardComponent dynamicsCard;
+    MetricsCardComponent stereoCard;
+    MetricsCardComponent qualityCard;
+    ToneShapeComponent toneShapeComponent;
+    ActionChecklistComponent targetsComponent;
+    ActionChecklistComponent actionsComponent;
+    ScoreComponent scoreComponent;
+    CompareComponent referenceComponent;
+    CompareComponent snapshotComponent;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FunkyMooseMixAnalyzerAudioProcessorEditor)
 };

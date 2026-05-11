@@ -6,6 +6,9 @@
 namespace fmma
 {
 constexpr int bandCount = 6;
+constexpr std::array<const char*, bandCount> bandNames {{
+    "Sub", "Bass", "Low-Mids", "Mids", "Presence", "Air"
+}};
 
 struct Range
 {

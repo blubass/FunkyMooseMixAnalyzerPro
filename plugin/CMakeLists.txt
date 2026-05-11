@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 3.22)
 
+# NOTE: The source tree path contains an '&' character (Calm&Tender).
+# The JUCE VST3 post-build signing script (checkBundleSigning.cmake) breaks
+# when the build directory also contains '&'. Always configure with a build
+# directory outside the source tree, e.g.:
+#   cmake -S plugin -B /tmp/fmma_build -DMIX_ANALYZER_JUCE_DIR=<path>
+# or set CMAKE_BINARY_DIR to a safe path before running cmake.
+
 project(FunkyMooseMixAnalyzerPlugin VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -47,7 +54,13 @@ target_sources(FunkyMooseMixAnalyzer
     PRIVATE
         Source/AnalysisModel.cpp
         Source/PluginProcessor.cpp
-        Source/PluginEditor.cpp)
+        Source/PluginEditor.cpp
+        Source/UI/SummaryComponent.cpp
+        Source/UI/MetricsCardComponent.cpp
+        Source/UI/ToneShapeComponent.cpp
+        Source/UI/ActionChecklistComponent.cpp
+        Source/UI/ScoreComponent.cpp
+        Source/UI/CompareComponent.cpp)
 
 target_compile_definitions(FunkyMooseMixAnalyzer
     PUBLIC

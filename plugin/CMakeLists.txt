@@ -60,7 +60,8 @@ target_sources(FunkyMooseMixAnalyzer
         Source/UI/ToneShapeComponent.cpp
         Source/UI/ActionChecklistComponent.cpp
         Source/UI/ScoreComponent.cpp
-        Source/UI/CompareComponent.cpp)
+        Source/UI/CompareComponent.cpp
+        Source/IPC/OscSender.cpp)
 
 target_compile_definitions(FunkyMooseMixAnalyzer
     PUBLIC
@@ -72,6 +73,7 @@ target_link_libraries(FunkyMooseMixAnalyzer
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
+        juce::juce_osc
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
@@ -84,6 +86,7 @@ if(BUILD_TESTING)
 
     target_include_directories(FunkyMooseMixAnalyzerTests
         PRIVATE
+            "${CMAKE_CURRENT_BINARY_DIR}/JuceLibraryCode"
             "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 
     target_compile_definitions(FunkyMooseMixAnalyzerTests
@@ -106,6 +109,7 @@ if(BUILD_TESTING)
 
     target_include_directories(FunkyMooseMixAnalyzerAudioFixtureTests
         PRIVATE
+            "${CMAKE_CURRENT_BINARY_DIR}/JuceLibraryCode"
             "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 
     target_compile_definitions(FunkyMooseMixAnalyzerAudioFixtureTests

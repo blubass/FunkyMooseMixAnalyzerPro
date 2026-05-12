@@ -24,7 +24,7 @@ sign_bundle() {
 }
 
 cmake -S "$SOURCE_LINK" -B "$BUILD_DIR" -DMIX_ANALYZER_JUCE_DIR="$JUCE_PATH" "$@"
-cmake --build "$BUILD_DIR" --config Release
+cmake --build "$BUILD_DIR" --config Release --target FunkyMooseMixAnalyzer_Standalone FunkyMooseMixAnalyzer_AU FunkyMooseMixAnalyzer_VST3
 
 ARTEFACT_ROOT="$BUILD_DIR/FunkyMooseMixAnalyzer_artefacts"
 

@@ -6,6 +6,43 @@ SOURCE_LINK="/private/tmp/fmma-plugin-src"
 BUILD_DIR="${FMMA_PLUGIN_BUILD_DIR:-/private/tmp/fmma-plugin-build}"
 ARTIFACT_DIR="$SOURCE_DIR/artifacts"
 JUCE_PATH="${MIX_ANALYZER_JUCE_DIR:-${JUCE_DIR:-/Users/uwearthurfelchle/Developer/JUCE}}"
+INSTALL_ARTIFACTS=0
+INSTALL_SCOPE="user"
+EXTRA_CMAKE_ARGS=()
+
+usage() {
+  cat <<'USAGE'
+Usage: bash plugin/build_macos.sh [--install] [--user|--system] [cmake options]
+
+Options:
+  --install            Install built VST3, AU and standalone artefacts after build.
+  --user               Install to current user locations (default).
+  --system             Install to system locations; may require sudo.
+  -h, --help           Show this help message.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install)
+      INSTALL_ARTIFACTS=1
+      ;;
+    --user)
+      INSTALL_SCOPE="user"
+      ;;
+    --system)
+      INSTALL_SCOPE="system"
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      EXTRA_CMAKE_ARGS+=("$1")
+      ;;
+  esac
+  shift
+done
 
 if [[ ! -d "$JUCE_PATH" ]]; then
   echo "JUCE not found: $JUCE_PATH" >&2
@@ -23,7 +60,7 @@ sign_bundle() {
   fi
 }
 
-cmake -S "$SOURCE_LINK" -B "$BUILD_DIR" -DMIX_ANALYZER_JUCE_DIR="$JUCE_PATH" "$@"
+cmake -S "$SOURCE_LINK" -B "$BUILD_DIR" -DMIX_ANALYZER_JUCE_DIR="$JUCE_PATH" "${EXTRA_CMAKE_ARGS[@]}"
 cmake --build "$BUILD_DIR" --config Release --target FunkyMooseMixAnalyzer_Standalone FunkyMooseMixAnalyzer_AU FunkyMooseMixAnalyzer_VST3
 
 ARTEFACT_ROOT="$BUILD_DIR/FunkyMooseMixAnalyzer_artefacts"
@@ -41,6 +78,10 @@ fi
 if [[ -d "$ARTEFACT_ROOT/Standalone/Funky Moose Mix Analyzer.app" ]]; then
   ditto "$ARTEFACT_ROOT/Standalone/Funky Moose Mix Analyzer.app" "$ARTIFACT_DIR/Funky Moose Mix Analyzer.app"
   sign_bundle "$ARTIFACT_DIR/Funky Moose Mix Analyzer.app"
+fi
+
+if [[ "$INSTALL_ARTIFACTS" -eq 1 ]]; then
+  bash "$SOURCE_DIR/install_macos.sh" --$INSTALL_SCOPE
 fi
 
 echo "Built plugin artefacts in: $ARTIFACT_DIR"

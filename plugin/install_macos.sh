@@ -43,6 +43,7 @@ done
 
 VST3_SRC="$ARTIFACT_DIR/Funky Moose Mix Analyzer.vst3"
 AU_SRC="$ARTIFACT_DIR/Funky Moose Mix Analyzer.component"
+APP_SRC="$ARTIFACT_DIR/Funky Moose Mix Analyzer.app"
 
 if [[ ! -d "$VST3_SRC" ]]; then
   echo "Missing VST3 artefact: $VST3_SRC" >&2
@@ -53,13 +54,16 @@ fi
 if [[ "$SCOPE" == "system" ]]; then
   VST3_DEST_ROOT="/Library/Audio/Plug-Ins/VST3"
   AU_DEST_ROOT="/Library/Audio/Plug-Ins/Components"
+  APP_DEST_ROOT="/Applications"
 else
   VST3_DEST_ROOT="$HOME/Library/Audio/Plug-Ins/VST3"
   AU_DEST_ROOT="$HOME/Library/Audio/Plug-Ins/Components"
+  APP_DEST_ROOT="$HOME/Applications"
 fi
 
 VST3_DEST="$VST3_DEST_ROOT/Funky Moose Mix Analyzer.vst3"
 AU_DEST="$AU_DEST_ROOT/Funky Moose Mix Analyzer.component"
+APP_DEST="$APP_DEST_ROOT/Funky Moose Mix Analyzer.app"
 
 sign_bundle() {
   local bundle="$1"
@@ -78,6 +82,13 @@ if [[ -d "$AU_SRC" ]]; then
   ditto "$AU_SRC" "$AU_DEST"
   sign_bundle "$AU_DEST"
   echo "Installed AU: $AU_DEST"
+fi
+
+if [[ -d "$APP_SRC" ]]; then
+  mkdir -p "$APP_DEST_ROOT"
+  ditto "$APP_SRC" "$APP_DEST"
+  sign_bundle "$APP_DEST"
+  echo "Installed standalone app: $APP_DEST"
 fi
 
 if [[ "$RESET_CUBASE_CACHE" -eq 1 ]]; then

@@ -155,7 +155,7 @@ juce::ValueTree metricsToValueTree(const juce::Identifier& type, const fmma::Ana
     setFloatProperty(tree, "worstLowMidPercent", metrics.worstLowMidPercent);
     setFloatProperty(tree, "analysisSeconds", metrics.analysisSeconds);
     setFloatProperty(tree, "fullPassSeconds", metrics.fullPassSeconds);
-    setBoolProperty(tree, "fullPassActive", false);
+    setBoolProperty(tree, "fullPassActive", metrics.fullPassActive);
     setBoolProperty(tree, "fullPassCompleted", metrics.fullPassCompleted);
     setBoolProperty(tree, "analysisFrozen", metrics.analysisFrozen);
 
@@ -183,7 +183,7 @@ fmma::AnalyzerMetrics valueTreeToMetrics(const juce::ValueTree& tree)
     metrics.integratedLufs = getFloatProperty(tree, "integratedLufs", metrics.integratedLufs);
     metrics.truePeakDb = getFloatProperty(tree, "truePeakDb", metrics.truePeakDb);
     metrics.truePeakHoldDb = getFloatProperty(tree, "truePeakHoldDb", metrics.truePeakHoldDb);
-    metrics.worstTruePeakDb = getFloatProperty(tree, "worstTruePeakDb", metrics.truePeakHoldDb);
+    metrics.worstTruePeakDb = getFloatProperty(tree, "worstTruePeakDb", metrics.worstTruePeakDb);
     metrics.lraLu = getFloatProperty(tree, "lraLu", metrics.lraLu);
     metrics.rmsDb = getFloatProperty(tree, "rmsDb", metrics.rmsDb);
     metrics.peakDb = getFloatProperty(tree, "peakDb", metrics.peakDb);
@@ -194,14 +194,14 @@ fmma::AnalyzerMetrics valueTreeToMetrics(const juce::ValueTree& tree)
     metrics.monoRmsDb = getFloatProperty(tree, "monoRmsDb", metrics.monoRmsDb);
     metrics.monoLossDb = getFloatProperty(tree, "monoLossDb", metrics.monoLossDb);
     metrics.correlation = getFloatProperty(tree, "correlation", metrics.correlation);
-    metrics.worstCorrelation = getFloatProperty(tree, "worstCorrelation", metrics.correlation);
-    metrics.worstMonoLossDb = getFloatProperty(tree, "worstMonoLossDb", metrics.monoLossDb);
+    metrics.worstCorrelation = getFloatProperty(tree, "worstCorrelation", metrics.worstCorrelation);
+    metrics.worstMonoLossDb = getFloatProperty(tree, "worstMonoLossDb", metrics.worstMonoLossDb);
     metrics.widthPct = getFloatProperty(tree, "widthPct", metrics.widthPct);
     metrics.msRatioDb = getFloatProperty(tree, "msRatioDb", metrics.msRatioDb);
     metrics.stereoBalanceDb = getFloatProperty(tree, "stereoBalanceDb", metrics.stereoBalanceDb);
     metrics.dcOffset = getFloatProperty(tree, "dcOffset", metrics.dcOffset);
     metrics.clippedPercent = getFloatProperty(tree, "clippedPercent", metrics.clippedPercent);
-    metrics.worstClippedPercent = getFloatProperty(tree, "worstClippedPercent", metrics.clippedPercent);
+    metrics.worstClippedPercent = getFloatProperty(tree, "worstClippedPercent", metrics.worstClippedPercent);
     metrics.silencePercent = getFloatProperty(tree, "silencePercent", metrics.silencePercent);
     metrics.transientDensity = getFloatProperty(tree, "transientDensity", metrics.transientDensity);
     metrics.attackTimeMs = getFloatProperty(tree, "attackTimeMs", metrics.attackTimeMs);
@@ -210,8 +210,8 @@ fmma::AnalyzerMetrics valueTreeToMetrics(const juce::ValueTree& tree)
     metrics.spectralRolloffHz = getFloatProperty(tree, "spectralRolloffHz", metrics.spectralRolloffHz);
     metrics.resonanceFreqHz = getFloatProperty(tree, "resonanceFreqHz", metrics.resonanceFreqHz);
     metrics.resonanceGainDb = getFloatProperty(tree, "resonanceGainDb", metrics.resonanceGainDb);
-    metrics.worstResonanceFreqHz = getFloatProperty(tree, "worstResonanceFreqHz", metrics.resonanceFreqHz);
-    metrics.worstResonanceGainDb = getFloatProperty(tree, "worstResonanceGainDb", metrics.resonanceGainDb);
+    metrics.worstResonanceFreqHz = getFloatProperty(tree, "worstResonanceFreqHz", metrics.worstResonanceFreqHz);
+    metrics.worstResonanceGainDb = getFloatProperty(tree, "worstResonanceGainDb", metrics.worstResonanceGainDb);
     metrics.analysisSeconds = getFloatProperty(tree, "analysisSeconds", metrics.analysisSeconds);
     metrics.fullPassSeconds = getFloatProperty(tree, "fullPassSeconds", metrics.fullPassSeconds);
     metrics.fullPassActive = false;
@@ -234,7 +234,7 @@ fmma::AnalyzerMetrics valueTreeToMetrics(const juce::ValueTree& tree)
                              metrics.bandSideRatiosDb[static_cast<size_t>(band)]);
     }
 
-    metrics.worstLowMidPercent = getFloatProperty(tree, "worstLowMidPercent", metrics.bandPercents[2]);
+    metrics.worstLowMidPercent = getFloatProperty(tree, "worstLowMidPercent", metrics.worstLowMidPercent);
 
     return metrics;
 }
@@ -252,6 +252,8 @@ FunkyMooseMixAnalyzerAudioProcessor::FunkyMooseMixAnalyzerAudioProcessor()
         band.store(1.0f, std::memory_order_relaxed);
     for (auto& band : bandSideRatiosDb)
         band.store(-120.0f, std::memory_order_relaxed);
+
+    startTimerHz(6); // Match UI refresh rate
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout
@@ -502,6 +504,64 @@ void FunkyMooseMixAnalyzerAudioProcessor::resetMeterState()
         band.store(1.0f, std::memory_order_relaxed);
     for (auto& band : bandSideRatiosDb)
         band.store(-120.0f, std::memory_order_relaxed);
+}
+
+void FunkyMooseMixAnalyzerAudioProcessor::timerCallback()
+{
+    const auto m = getMetrics();
+    const auto genreIndex = static_cast<int>(*parameters.getRawParameterValue("genre"));
+    const auto instrumental = static_cast<bool>(*parameters.getRawParameterValue("instrumental"));
+    const auto profile = fmma::getGenreProfile(genreIndex);
+    
+    auto input = makeAssessmentInput();
+    input.instrumental = instrumental;
+    
+    const auto assessment = fmma::assessMix(input, profile);
+    
+    oscSender.send(m, assessment);
+}
+
+fmma::MixAssessmentInput FunkyMooseMixAnalyzerAudioProcessor::makeAssessmentInput() const
+{
+    const auto m = getMetrics();
+    fmma::MixAssessmentInput input;
+    input.integratedLufs = m.integratedLufs;
+    input.crestDb = m.crestDb;
+    input.correlation = m.correlation;
+    input.msRatioDb = m.msRatioDb;
+    input.monoLossDb = m.monoLossDb;
+    input.truePeakDb = m.truePeakDb;
+    input.clippedPercent = m.clippedPercent;
+    input.worstTruePeakDb = m.worstTruePeakDb;
+    input.worstCorrelation = m.worstCorrelation;
+    input.worstMonoLossDb = m.worstMonoLossDb;
+    input.worstClippedPercent = m.worstClippedPercent;
+    input.worstLowMidPercent = m.worstLowMidPercent;
+    input.worstResonanceFreqHz = m.worstResonanceFreqHz;
+    input.worstResonanceGainDb = m.worstResonanceGainDb;
+    input.subPercent = m.bandPercents[0];
+    input.bassPercent = m.bandPercents[1];
+    input.lowMidPercent = m.bandPercents[2];
+    input.midPercent = m.bandPercents[3];
+    input.lowEndPercent = fmma::lowEndOf(m);
+    input.presencePercent = fmma::presenceOf(m);
+    input.airPercent = m.bandPercents[5];
+    input.lowEndCorrelation = fmma::lowEndCorrelationOf(m);
+    input.lowEndSideDb = fmma::lowEndSideDbOf(m);
+    input.widthPct = m.widthPct;
+    input.lraLu = m.lraLu;
+    input.transientDensity = m.transientDensity;
+    input.attackTimeMs = m.attackTimeMs;
+    input.spectralCentroidHz = m.spectralCentroidHz;
+    input.spectralRolloffHz = m.spectralRolloffHz;
+    input.resonanceFreqHz = m.resonanceFreqHz;
+    input.resonanceGainDb = m.resonanceGainDb;
+    input.analysisSeconds = m.analysisSeconds;
+    input.fullPassSeconds = m.fullPassSeconds;
+    input.fullPassActive = m.fullPassActive;
+    input.fullPassCompleted = m.fullPassCompleted;
+    input.analysisFrozen = m.analysisFrozen;
+    return input;
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::publishMetric(std::atomic<float>& target,

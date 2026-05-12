@@ -81,6 +81,49 @@ To check the mathematical accuracy of the engine, you can run automated tests ag
 
 ---
 
+## 🛠️ Plugin Development
+
+The Funky Moose Mix Analyzer is also available as a JUCE-based audio plugin (VST3, AU, Standalone).
+
+### Building the Plugin
+
+1. **Prerequisites**:
+   - CMake 3.16+
+   - JUCE framework (cloned or installed)
+   - C++17 compiler
+
+2. **Clone JUCE** (if not already):
+   ```bash
+   git clone https://github.com/juce-framework/JUCE.git
+   ```
+
+3. **Build**:
+   ```bash
+   cd plugin
+   mkdir build && cd build
+   cmake .. -DMIX_ANALYZER_JUCE_DIR=/path/to/JUCE
+   make -j$(nproc)
+   ```
+
+4. **Run Tests**:
+   ```bash
+   ctest --output-on-failure
+   ```
+
+### API Documentation
+
+The plugin exposes the following metrics via `getMetrics()`:
+
+- **Loudness**: momentaryLufs, shortTermLufs, integratedLufs
+- **Dynamics**: truePeakDb, crestDb, lraLu
+- **Stereo**: correlation, phaseCorrelation, msRatioDb
+- **Spectrum**: spectralCentroidHz, resonanceFreqHz
+- **Bands**: bandPercents, bandCorrelations
+
+For full API details, see `PluginProcessor.h`.
+
+---
+
 ## 🏗️ Building the macOS App
 
 You can generate the native macOS bundle (`.app`) and the installer (`.dmg`) yourself:

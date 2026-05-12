@@ -1831,3 +1831,49 @@ async function checkSystem() {
 
 // Initial System Check
 checkSystem();
+
+// --- Live Plugin Monitor ---
+const LiveMonitor = {
+    interval: null,
+    active: false,
+    lastUpdate: 0,
+    
+    start() {
+        if (this.active) return;
+        this.active = true;
+        this.poll();
+        this.interval = setInterval(() => this.poll(), 500);
+    },
+    
+    stop() {
+        this.active = false;
+        clearInterval(this.interval);
+    },
+    
+    async poll() {
+        try {
+            const response = await fetch('/api/live-metrics');
+            const result = await response.json();
+            
+            const indicator = document.getElementById('liveLinkIndicator');
+            const statusText = document.getElementById('liveStatusText');
+            
+            if (indicator && statusText) {
+                if (result && result.status === 'connected') {
+                    indicator.classList.remove('disconnected');
+                    indicator.classList.add('connected');
+                    statusText.textContent = 'Plugin: Live';
+                    this.lastUpdate = Date.now();
+                } else {
+                    indicator.classList.remove('connected');
+                    indicator.classList.add('disconnected');
+                    statusText.textContent = 'Plugin: Off';
+                }
+            }
+        } catch (e) {
+            // Silently fail polling
+        }
+    }
+};
+
+LiveMonitor.start();

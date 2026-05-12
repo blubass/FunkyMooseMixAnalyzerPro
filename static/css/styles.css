@@ -84,6 +84,46 @@ h1, h2, h3, h4, h5, h6 {
     align-items: center;
 }
 
+.live-link-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.3s;
+    backdrop-filter: blur(10px);
+}
+
+.live-link-indicator.connected {
+    border-color: rgba(16, 185, 129, 0.4);
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.live-link-indicator i {
+    font-size: 0.7rem;
+    transition: color 0.3s;
+}
+
+.live-link-indicator.disconnected i {
+    color: var(--text-muted);
+}
+
+.live-link-indicator.connected i {
+    color: var(--success);
+    animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.1); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+
 .lang-switcher {
     display: flex;
     background: rgba(255, 255, 255, 0.05);

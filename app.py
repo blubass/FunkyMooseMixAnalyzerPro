@@ -33,12 +33,13 @@ if getattr(sys, 'frozen', False):
 else:
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
-from core.config import (
-    DEFAULT_SR, SLICE_SEC, MAX_UPLOAD_MB, MEDIA_TTL_SECONDS, PROCESS_TIMEOUT_SECONDS,
-    ALLOWED_AUDIO_EXTENSIONS, DEFAULT_GENRE, FALLBACK_GENRE,
     GENRE_PROFILES, GENRE_CURVES, BAND_DEFS, BAND_ALIASES,
     get_genre_profile, serialize_genre_profile, genre_profiles_payload, get_target_lufs
 )
+from core.plugin_bridge import bridge
+
+# Start the OSC bridge
+bridge.start()
 
 audio_dir = os.path.join(data_dir, "audio")
 image_dir = os.path.join(data_dir, "images")
@@ -92,12 +93,18 @@ def get_bin_path(cmd):
             if os.path.exists(bundle_bin):
                 return bundle_bin
             
-    # 2. Check in local bin folder (relative to script)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
     for name in names:
         local_bin = os.path.join(script_dir, "bin", name)
         if os.path.exists(local_bin):
             return local_bin
+
+@app.route('/api/live-metrics')
+def get_live_metrics():
+    metrics = bridge.get_latest_metrics()
+    if metrics:
+        return jsonify({"status": "connected", "data": metrics})
+    return jsonify({"status": "disconnected"})
+
 
     # 3. Check standard system paths
     for name in names:

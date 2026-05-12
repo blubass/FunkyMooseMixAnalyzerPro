@@ -696,4 +696,24 @@ MixAssessment assessMix(const MixAssessmentInput& input, const GenreProfile& pro
 
     return result;
 }
+
+float lowEndOf(const AnalyzerMetrics& source) noexcept
+{
+    return source.bandPercents[0] + source.bandPercents[1];
+}
+
+float presenceOf(const AnalyzerMetrics& source) noexcept
+{
+    return source.bandPercents[4];
+}
+
+float lowEndCorrelationOf(const AnalyzerMetrics& source) noexcept
+{
+    return juce::jmin(source.bandCorrelations[0], source.bandCorrelations[1]);
+}
+
+float lowEndSideDbOf(const AnalyzerMetrics& source) noexcept
+{
+    return juce::jmax(source.bandSideRatiosDb[0], source.bandSideRatiosDb[1]);
+}
 }

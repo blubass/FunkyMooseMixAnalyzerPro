@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AnalysisModel.h"
+#include "IPC/OscSender.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
@@ -9,59 +10,8 @@
 #include <memory>
 #include <vector>
 
-namespace fmma
-{
-struct AnalyzerMetrics
-{
-    float momentaryLufs = -120.0f;
-    float shortTermLufs = -120.0f;
-    float integratedLufs = -120.0f;
-    float truePeakDb = -120.0f;
-    float truePeakHoldDb = -120.0f;
-    float worstTruePeakDb = -120.0f;
-    float lraLu = 0.0f;
-    float rmsDb = -120.0f;
-    float peakDb = -120.0f;
-    float crestDb = 0.0f;
-    float leftPeakDb = -120.0f;
-    float rightPeakDb = -120.0f;
-    float monoPeakDb = -120.0f;
-    float monoRmsDb = -120.0f;
-    float monoLossDb = 0.0f;
-    float correlation = 1.0f;
-    float worstCorrelation = 1.0f;
-    float worstMonoLossDb = 0.0f;
-    float widthPct = 0.0f;
-    float msRatioDb = 0.0f;
-    float stereoBalanceDb = 0.0f;
-    float dcOffset = 0.0f;
-    float clippedPercent = 0.0f;
-    float worstClippedPercent = 0.0f;
-    float silencePercent = 0.0f;
-    float transientDensity = 0.0f;
-    float attackTimeMs = 0.0f;
-    float percussionEnergyPct = 0.0f;
-    float spectralCentroidHz = 0.0f;
-    float spectralRolloffHz = 0.0f;
-    float resonanceFreqHz = 0.0f;
-    float resonanceGainDb = 0.0f;
-    float worstResonanceFreqHz = 0.0f;
-    float worstResonanceGainDb = 0.0f;
-    float worstLowMidPercent = 0.0f;
-    float analysisSeconds = 0.0f;
-    float fullPassSeconds = 0.0f;
-    bool fullPassActive = false;
-    bool fullPassCompleted = false;
-    bool analysisFrozen = false;
-    bool hostTransportPlaying = false;
-    bool hostAutoPassActive = false;
-    std::array<float, bandCount> bandPercents {};
-    std::array<float, bandCount> bandCorrelations { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
-    std::array<float, bandCount> bandSideRatiosDb { -120.0f, -120.0f, -120.0f, -120.0f, -120.0f, -120.0f };
-};
-}
-
-class FunkyMooseMixAnalyzerAudioProcessor final : public juce::AudioProcessor
+class FunkyMooseMixAnalyzerAudioProcessor final : public juce::AudioProcessor,
+                                                 private juce::Timer
 {
 public:
     FunkyMooseMixAnalyzerAudioProcessor();
@@ -110,12 +60,15 @@ public:
     void requestFullPassStart() noexcept;
     void requestFullPassFinish() noexcept;
 
+    fmma::MixAssessmentInput makeAssessmentInput() const;
+
     juce::AudioProcessorValueTreeState parameters;
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     void configureBandFilters(double newSampleRate);
+    void timerCallback() override;
     void configureLoudnessMeter(double newSampleRate, int samplesPerBlock);
     void pushLoudnessPower(double power) noexcept;
     void addIntegratedLoudnessBlock(double meanPower) noexcept;
@@ -195,6 +148,14 @@ private:
     std::array<float, spectrumFftSize * 2> spectrumData {};
     int spectrumFifoIndex = 0;
 
+    // New: For phase correlation
+    juce::dsp::FFT phaseFft { spectrumFftOrder };
+    std::array<float, spectrumFftSize> phaseFifoLeft {};
+    std::array<float, spectrumFftSize> phaseFifoRight {};
+    std::array<float, spectrumFftSize * 2> phaseDataLeft {};
+    std::array<float, spectrumFftSize * 2> phaseDataRight {};
+    int phaseFifoIndex = 0;
+
     std::atomic<float> momentaryLufs {-120.0f};
     std::atomic<float> shortTermLufs {-120.0f};
     std::atomic<float> integratedLufs {-120.0f};
@@ -230,6 +191,7 @@ private:
     std::atomic<float> worstResonanceFreqHz {0.0f};
     std::atomic<float> worstResonanceGainDb {0.0f};
     std::atomic<float> worstLowMidPercent {0.0f};
+    std::atomic<float> phaseCorrelation {1.0f};
     std::atomic<float> analysisSeconds {0.0f};
     std::array<std::atomic<float>, fmma::bandCount> bandPercents {};
     std::array<std::atomic<float>, fmma::bandCount> bandCorrelations {};
@@ -242,6 +204,8 @@ private:
     bool hasStoredReferenceMetrics = false;
     bool hasStoredSnapshotA = false;
     bool hasStoredSnapshotB = false;
+
+    OscSender oscSender;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FunkyMooseMixAnalyzerAudioProcessor)
 };

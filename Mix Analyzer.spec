@@ -47,5 +47,5 @@ app = BUNDLE(
     coll,
     name='Mix Analyzer.app',
     icon='assets/app_icon.icns',
-    bundle_identifier='at.uwefelchle.funkymoose.mixanalyzer',
+    bundle_identifier=None,
 )

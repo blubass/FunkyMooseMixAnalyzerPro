@@ -72,6 +72,56 @@ struct MixAssessmentInput
     bool instrumental = false;
 };
 
+struct AnalyzerMetrics
+{
+    float momentaryLufs = -120.0f;
+    float shortTermLufs = -120.0f;
+    float integratedLufs = -120.0f;
+    float truePeakDb = -120.0f;
+    float truePeakHoldDb = -120.0f;
+    float worstTruePeakDb = -120.0f;
+    float lraLu = 0.0f;
+    float rmsDb = -120.0f;
+    float peakDb = -120.0f;
+    float crestDb = 0.0f;
+    float leftPeakDb = -120.0f;
+    float rightPeakDb = -120.0f;
+    float monoPeakDb = -120.0f;
+    float monoRmsDb = -120.0f;
+    float monoLossDb = 0.0f;
+    float correlation = 1.0f;
+    float worstCorrelation = 1.0f;
+    float worstMonoLossDb = 0.0f;
+    float widthPct = 0.0f;
+    float msRatioDb = 0.0f;
+    float stereoBalanceDb = 0.0f;
+    float dcOffset = 0.0f;
+    float clippedPercent = 0.0f;
+    float worstClippedPercent = 0.0f;
+    float silencePercent = 0.0f;
+    float transientDensity = 0.0f;
+    float attackTimeMs = 0.0f;
+    float percussionEnergyPct = 0.0f;
+    float spectralCentroidHz = 0.0f;
+    float spectralRolloffHz = 0.0f;
+    float resonanceFreqHz = 0.0f;
+    float resonanceGainDb = 0.0f;
+    float worstResonanceFreqHz = 0.0f;
+    float worstResonanceGainDb = 0.0f;
+    float worstLowMidPercent = 0.0f;
+    float phaseCorrelation = 1.0f; // New: Phase correlation between channels
+    float analysisSeconds = 0.0f;
+    float fullPassSeconds = 0.0f;
+    bool fullPassActive = false;
+    bool fullPassCompleted = false;
+    bool analysisFrozen = false;
+    bool hostTransportPlaying = false;
+    bool hostAutoPassActive = false;
+    std::array<float, bandCount> bandPercents {};
+    std::array<float, bandCount> bandCorrelations { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+    std::array<float, bandCount> bandSideRatiosDb { -120.0f, -120.0f, -120.0f, -120.0f, -120.0f, -120.0f };
+};
+
 struct MixAssessment
 {
     int overallScore = 50;
@@ -121,4 +171,9 @@ const GenreProfile& getGenreProfile(int index) noexcept;
 int getNumGenreProfiles() noexcept;
 MixAssessment assessMix(const MixAssessmentInput& input, const GenreProfile& profile);
 juce::String formatRange(const Range& range, const juce::String& suffix, int decimals = 0);
+
+float lowEndOf(const AnalyzerMetrics& source) noexcept;
+float presenceOf(const AnalyzerMetrics& source) noexcept;
+float lowEndCorrelationOf(const AnalyzerMetrics& source) noexcept;
+float lowEndSideDbOf(const AnalyzerMetrics& source) noexcept;
 }

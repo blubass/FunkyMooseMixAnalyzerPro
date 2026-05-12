@@ -27,26 +27,6 @@ juce::String formatHz(float value)
     return juce::String(value, 0) + " Hz";
 }
 
-float lowEndOf(const fmma::AnalyzerMetrics& source) noexcept
-{
-    return source.bandPercents[0] + source.bandPercents[1];
-}
-
-float presenceOf(const fmma::AnalyzerMetrics& source) noexcept
-{
-    return source.bandPercents[4];
-}
-
-float lowEndCorrelationOf(const fmma::AnalyzerMetrics& source) noexcept
-{
-    return juce::jmin(source.bandCorrelations[0], source.bandCorrelations[1]);
-}
-
-float lowEndSideDbOf(const fmma::AnalyzerMetrics& source) noexcept
-{
-    return juce::jmax(source.bandSideRatiosDb[0], source.bandSideRatiosDb[1]);
-}
-
 juce::var jsonNumber(float value)
 {
     return std::isfinite(value) ? juce::var(static_cast<double>(value)) : juce::var();
@@ -247,7 +227,7 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
     const auto instrumentalState = instrumentalToggle.getToggleState();
     if (--assessmentCountdown <= 0 || genreIndex != lastGenreIndex || instrumentalState != lastInstrumentalState)
     {
-        assessment = fmma::assessMix(makeAssessmentInput(), fmma::getGenreProfile(genreIndex));
+        assessment = fmma::assessMix(audioProcessor.makeAssessmentInput(), fmma::getGenreProfile(genreIndex));
         assessmentCountdown = 1;
         lastGenreIndex = genreIndex;
         lastInstrumentalState = instrumentalState;
@@ -264,7 +244,7 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
     summaryData.durationSeconds = metrics.fullPassCompleted ? metrics.fullPassSeconds : metrics.analysisSeconds;
     summaryData.lufsDelta = assessment.lufsDelta;
     
-    auto input = makeAssessmentInput();
+    const auto input = audioProcessor.makeAssessmentInput();
     summaryData.lowEndPercent = input.lowEndPercent;
     summaryData.presencePercent = input.presencePercent;
     
@@ -453,50 +433,48 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
 
 void FunkyMooseMixAnalyzerAudioProcessorEditor::smoothDisplayMetrics(const fmma::AnalyzerMetrics& raw)
 {
-    if (! hasDisplayMetrics || raw.analysisFrozen)
+    if (! hasDisplayMetrics)
     {
         metrics = raw;
         hasDisplayMetrics = true;
         return;
     }
 
-    constexpr auto slow = 0.12f;
-    constexpr auto medium = 0.18f;
-    metrics.momentaryLufs = raw.momentaryLufs;
-    metrics.shortTermLufs = raw.shortTermLufs;
-    metrics.integratedLufs = raw.integratedLufs;
-    metrics.truePeakDb = raw.truePeakDb;
-    metrics.truePeakHoldDb = raw.truePeakHoldDb;
+    const float amount = 0.15f;
+    metrics.momentaryLufs = smoothValue(metrics.momentaryLufs, raw.momentaryLufs, amount);
+    metrics.shortTermLufs = smoothValue(metrics.shortTermLufs, raw.shortTermLufs, amount);
+    metrics.integratedLufs = smoothValue(metrics.integratedLufs, raw.integratedLufs, amount);
+    metrics.truePeakDb = smoothValue(metrics.truePeakDb, raw.truePeakDb, amount);
+    metrics.truePeakHoldDb = smoothValue(metrics.truePeakHoldDb, raw.truePeakHoldDb, 0.05f);
     metrics.worstTruePeakDb = raw.worstTruePeakDb;
-    metrics.lraLu = raw.lraLu;
-    metrics.rmsDb = smoothValue(metrics.rmsDb, raw.rmsDb, slow, 0.04f);
-    metrics.peakDb = smoothValue(metrics.peakDb, raw.peakDb, medium, 0.05f);
-    metrics.crestDb = smoothValue(metrics.crestDb, raw.crestDb, slow, 0.05f);
-    metrics.leftPeakDb = smoothValue(metrics.leftPeakDb, raw.leftPeakDb, medium, 0.05f);
-    metrics.rightPeakDb = smoothValue(metrics.rightPeakDb, raw.rightPeakDb, medium, 0.05f);
-    metrics.monoPeakDb = smoothValue(metrics.monoPeakDb, raw.monoPeakDb, medium, 0.05f);
-    metrics.monoRmsDb = smoothValue(metrics.monoRmsDb, raw.monoRmsDb, slow, 0.04f);
-    metrics.monoLossDb = smoothValue(metrics.monoLossDb, raw.monoLossDb, 0.08f, 0.03f);
-    metrics.correlation = smoothValue(metrics.correlation, raw.correlation, 0.07f, 0.005f);
+    metrics.lraLu = smoothValue(metrics.lraLu, raw.lraLu, 0.05f);
+    metrics.rmsDb = smoothValue(metrics.rmsDb, raw.rmsDb, amount);
+    metrics.peakDb = smoothValue(metrics.peakDb, raw.peakDb, amount);
+    metrics.crestDb = smoothValue(metrics.crestDb, raw.crestDb, amount);
+    metrics.leftPeakDb = smoothValue(metrics.leftPeakDb, raw.leftPeakDb, amount);
+    metrics.rightPeakDb = smoothValue(metrics.rightPeakDb, raw.rightPeakDb, amount);
+    metrics.monoPeakDb = smoothValue(metrics.monoPeakDb, raw.monoPeakDb, amount);
+    metrics.monoRmsDb = smoothValue(metrics.monoRmsDb, raw.monoRmsDb, amount);
+    metrics.monoLossDb = smoothValue(metrics.monoLossDb, raw.monoLossDb, amount);
+    metrics.correlation = smoothValue(metrics.correlation, raw.correlation, amount);
     metrics.worstCorrelation = raw.worstCorrelation;
     metrics.worstMonoLossDb = raw.worstMonoLossDb;
-    metrics.widthPct = smoothValue(metrics.widthPct, raw.widthPct, 0.07f, 0.15f);
-    metrics.msRatioDb = smoothValue(metrics.msRatioDb, raw.msRatioDb, 0.07f, 0.05f);
-    metrics.stereoBalanceDb = smoothValue(metrics.stereoBalanceDb, raw.stereoBalanceDb, 0.08f, 0.03f);
-    metrics.dcOffset = smoothValue(metrics.dcOffset, raw.dcOffset, 0.05f, 0.00002f);
-    metrics.clippedPercent = raw.clippedPercent;
+    metrics.widthPct = smoothValue(metrics.widthPct, raw.widthPct, amount);
+    metrics.msRatioDb = smoothValue(metrics.msRatioDb, raw.msRatioDb, amount);
+    metrics.stereoBalanceDb = smoothValue(metrics.stereoBalanceDb, raw.stereoBalanceDb, amount);
+    metrics.dcOffset = smoothValue(metrics.dcOffset, raw.dcOffset, amount);
+    metrics.clippedPercent = smoothValue(metrics.clippedPercent, raw.clippedPercent, amount);
     metrics.worstClippedPercent = raw.worstClippedPercent;
-    metrics.silencePercent = raw.silencePercent;
-    metrics.transientDensity = smoothValue(metrics.transientDensity, raw.transientDensity, 0.09f, 0.05f);
-    metrics.attackTimeMs = smoothValue(metrics.attackTimeMs, raw.attackTimeMs, 0.07f, 0.3f);
-    metrics.percussionEnergyPct = smoothValue(metrics.percussionEnergyPct, raw.percussionEnergyPct, 0.08f, 0.1f);
-    metrics.spectralCentroidHz = smoothValue(metrics.spectralCentroidHz, raw.spectralCentroidHz, 0.07f, 10.0f);
-    metrics.spectralRolloffHz = smoothValue(metrics.spectralRolloffHz, raw.spectralRolloffHz, 0.07f, 10.0f);
-    metrics.resonanceFreqHz = smoothValue(metrics.resonanceFreqHz, raw.resonanceFreqHz, 0.06f, 25.0f);
-    metrics.resonanceGainDb = smoothValue(metrics.resonanceGainDb, raw.resonanceGainDb, 0.07f, 0.05f);
+    metrics.silencePercent = smoothValue(metrics.silencePercent, raw.silencePercent, amount);
+    metrics.transientDensity = smoothValue(metrics.transientDensity, raw.transientDensity, amount);
+    metrics.attackTimeMs = smoothValue(metrics.attackTimeMs, raw.attackTimeMs, amount);
+    metrics.percussionEnergyPct = smoothValue(metrics.percussionEnergyPct, raw.percussionEnergyPct, amount);
+    metrics.spectralCentroidHz = smoothValue(metrics.spectralCentroidHz, raw.spectralCentroidHz, amount);
+    metrics.spectralRolloffHz = smoothValue(metrics.spectralRolloffHz, raw.spectralRolloffHz, amount);
+    metrics.resonanceFreqHz = smoothValue(metrics.resonanceFreqHz, raw.resonanceFreqHz, amount);
+    metrics.resonanceGainDb = smoothValue(metrics.resonanceGainDb, raw.resonanceGainDb, amount);
     metrics.worstResonanceFreqHz = raw.worstResonanceFreqHz;
     metrics.worstResonanceGainDb = raw.worstResonanceGainDb;
-    metrics.worstLowMidPercent = raw.worstLowMidPercent;
     metrics.analysisSeconds = raw.analysisSeconds;
     metrics.fullPassSeconds = raw.fullPassSeconds;
     metrics.fullPassActive = raw.fullPassActive;
@@ -505,12 +483,11 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::smoothDisplayMetrics(const fmma:
     metrics.hostTransportPlaying = raw.hostTransportPlaying;
     metrics.hostAutoPassActive = raw.hostAutoPassActive;
 
-    for (auto i = 0; i < fmma::bandCount; ++i)
+    for (size_t i = 0; i < fmma::bandCount; ++i)
     {
-        const auto index = static_cast<size_t>(i);
-        metrics.bandPercents[index] = smoothValue(metrics.bandPercents[index], raw.bandPercents[index], 0.07f, 0.08f);
-        metrics.bandCorrelations[index] = smoothValue(metrics.bandCorrelations[index], raw.bandCorrelations[index], 0.08f, 0.004f);
-        metrics.bandSideRatiosDb[index] = smoothValue(metrics.bandSideRatiosDb[index], raw.bandSideRatiosDb[index], 0.08f, 0.05f);
+        metrics.bandPercents[i] = smoothValue(metrics.bandPercents[i], raw.bandPercents[i], amount);
+        metrics.bandCorrelations[i] = smoothValue(metrics.bandCorrelations[i], raw.bandCorrelations[i], amount);
+        metrics.bandSideRatiosDb[i] = smoothValue(metrics.bandSideRatiosDb[i], raw.bandSideRatiosDb[i], amount);
     }
 }
 
@@ -528,49 +505,6 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::syncStoredSnapshotsFromProcessor
     hasSnapshotB = audioProcessor.getStoredSnapshotB(stored);
     if (hasSnapshotB)
         snapshotB = stored;
-}
-
-fmma::MixAssessmentInput FunkyMooseMixAnalyzerAudioProcessorEditor::makeAssessmentInput() const
-{
-    fmma::MixAssessmentInput input;
-    input.integratedLufs = metrics.integratedLufs;
-    input.crestDb = metrics.crestDb;
-    input.correlation = metrics.correlation;
-    input.msRatioDb = metrics.msRatioDb;
-    input.monoLossDb = metrics.monoLossDb;
-    input.truePeakDb = metrics.truePeakDb;
-    input.clippedPercent = metrics.clippedPercent;
-    input.worstTruePeakDb = metrics.worstTruePeakDb;
-    input.worstCorrelation = metrics.worstCorrelation;
-    input.worstMonoLossDb = metrics.worstMonoLossDb;
-    input.worstClippedPercent = metrics.worstClippedPercent;
-    input.worstLowMidPercent = metrics.worstLowMidPercent;
-    input.worstResonanceFreqHz = metrics.worstResonanceFreqHz;
-    input.worstResonanceGainDb = metrics.worstResonanceGainDb;
-    input.subPercent = metrics.bandPercents[0];
-    input.bassPercent = metrics.bandPercents[1];
-    input.lowMidPercent = metrics.bandPercents[2];
-    input.midPercent = metrics.bandPercents[3];
-    input.lowEndPercent = metrics.bandPercents[0] + metrics.bandPercents[1];
-    input.presencePercent = metrics.bandPercents[4];
-    input.airPercent = metrics.bandPercents[5];
-    input.lowEndCorrelation = lowEndCorrelationOf(metrics);
-    input.lowEndSideDb = lowEndSideDbOf(metrics);
-    input.widthPct = metrics.widthPct;
-    input.lraLu = metrics.lraLu;
-    input.transientDensity = metrics.transientDensity;
-    input.attackTimeMs = metrics.attackTimeMs;
-    input.spectralCentroidHz = metrics.spectralCentroidHz;
-    input.spectralRolloffHz = metrics.spectralRolloffHz;
-    input.resonanceFreqHz = metrics.resonanceFreqHz;
-    input.resonanceGainDb = metrics.resonanceGainDb;
-    input.analysisSeconds = metrics.analysisSeconds;
-    input.fullPassSeconds = metrics.fullPassSeconds;
-    input.fullPassActive = metrics.fullPassActive;
-    input.fullPassCompleted = metrics.fullPassCompleted;
-    input.analysisFrozen = metrics.analysisFrozen;
-    input.instrumental = instrumentalToggle.getToggleState();
-    return input;
 }
 
 juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::formatDuration(float seconds) const
@@ -843,7 +777,7 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::copyJsonReportToClipboard()
 juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport() const
 {
     const auto& profile = fmma::getGenreProfile(genreBox.getSelectedItemIndex());
-    const auto input = makeAssessmentInput();
+    const auto input = audioProcessor.makeAssessmentInput();
     const auto truePeakForReport = metrics.fullPassCompleted ? juce::jmax(metrics.truePeakDb, metrics.worstTruePeakDb)
                                                              : metrics.truePeakDb;
     juce::String report;
@@ -991,7 +925,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport() const
 juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport() const
 {
     const auto& profile = fmma::getGenreProfile(genreBox.getSelectedItemIndex());
-    const auto input = makeAssessmentInput();
+    const auto input = audioProcessor.makeAssessmentInput();
     const auto truePeakForReport = metrics.fullPassCompleted ? juce::jmax(metrics.truePeakDb, metrics.worstTruePeakDb)
                                                              : metrics.truePeakDb;
 

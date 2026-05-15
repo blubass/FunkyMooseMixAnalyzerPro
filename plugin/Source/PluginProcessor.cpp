@@ -1446,8 +1446,13 @@ void FunkyMooseMixAnalyzerAudioProcessor::setStateInformation(const void* data, 
     if (xmlState != nullptr && xmlState->hasTagName(parameters.state.getType()))
     {
         const auto state = juce::ValueTree::fromXml(*xmlState);
-        parameters.replaceState(state);
         restoreStoredAnalysisState(state);
+
+        auto parameterState = state.createCopy();
+        if (auto storedState = parameterState.getChildWithName(storedAnalysisStateId); storedState.isValid())
+            parameterState.removeChild(storedState, nullptr);
+
+        parameters.replaceState(parameterState);
     }
 }
 

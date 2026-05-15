@@ -398,16 +398,25 @@ void phaseCorrelationFixtureTestsPhase()
     metrics = processor.getMetrics();
     expectNear(metrics.phaseCorrelation, -1.0f, 0.1f, "Out-of-phase signals should have negative phase correlation");
 }
+
+void runFixtureTest(const char* name, void (*test)())
+{
+    std::cerr << "RUN " << name << std::endl;
+    test();
+    std::cerr << "DONE " << name << std::endl;
+}
 }
 
 int main()
 {
-    sineFixtureMeasuresLevelAndStereo();
-    antiPhaseFixtureFlagsMonoLoss();
-    clippedFixtureFlagsPeaks();
-    spectralFixtureFindsExpectedBand();
-    storedAnalysisStateRoundTrips();
-    phaseCorrelationFixtureTestsPhase();
+    juce::ScopedJuceInitialiser_GUI juceInitialiser;
+
+    runFixtureTest("sineFixtureMeasuresLevelAndStereo", sineFixtureMeasuresLevelAndStereo);
+    runFixtureTest("antiPhaseFixtureFlagsMonoLoss", antiPhaseFixtureFlagsMonoLoss);
+    runFixtureTest("clippedFixtureFlagsPeaks", clippedFixtureFlagsPeaks);
+    runFixtureTest("spectralFixtureFindsExpectedBand", spectralFixtureFindsExpectedBand);
+    runFixtureTest("storedAnalysisStateRoundTrips", storedAnalysisStateRoundTrips);
+    runFixtureTest("phaseCorrelationFixtureTestsPhase", phaseCorrelationFixtureTestsPhase);
     if (failures == 0)
     {
         std::cout << "AudioFixtureTests OK\n";

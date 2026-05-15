@@ -57,7 +57,7 @@ class PluginBridge:
         # msg.addFloat32(m.widthPct);       // 7
         # msg.addFloat32(m.monoLossDb);     // 8
         # msg.addFloat32(m.clippedPercent); // 9
-        # msg.addFloat32(m.truePeakDb);     // 10 (worst TP)
+        # msg.addFloat32(m.worstTruePeakDb); // 10
         # msg.addFloat32(m.spectralCentroidHz); // 11
         # msg.addFloat32(m.spectralRolloffHz);  // 12
         # msg.addFloat32(m.resonanceFreqHz);     // 13
@@ -69,9 +69,12 @@ class PluginBridge:
         # confidenceScore (int) -> 24
         # analysisSeconds (float) -> 25
         # fullPassCompleted (int) -> 26
+        # worstClippedPercent (float) -> 27
 
         if len(args) < 27:
             return
+
+        worst_clipping = args[27] if len(args) > 27 else args[9]
 
         with self.lock:
             self.metrics = {
@@ -90,7 +93,8 @@ class PluginBridge:
                 },
                 "safety": {
                     "clipping": args[9],
-                    "worstTruePeak": args[10]
+                    "worstTruePeak": args[10],
+                    "worstClipping": worst_clipping
                 },
                 "spectral": {
                     "centroid": args[11],

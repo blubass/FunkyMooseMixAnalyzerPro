@@ -43,7 +43,7 @@ void OscSender::send(const fmma::AnalyzerMetrics& m,
 
     // --- Clipping / Safety ---
     msg.addFloat32(m.clippedPercent);
-    msg.addFloat32(m.truePeakDb);   // worst TP re-uses truePeak for now (live)
+    msg.addFloat32(m.worstTruePeakDb);
 
     // --- Spectral ---
     msg.addFloat32(m.spectralCentroidHz);
@@ -64,6 +64,7 @@ void OscSender::send(const fmma::AnalyzerMetrics& m,
     // --- Analysis state ---
     msg.addFloat32(m.analysisSeconds);
     msg.addInt32(m.fullPassCompleted ? 1 : 0);
+    msg.addFloat32(m.worstClippedPercent);
 
     sender.send(msg);
 }

@@ -48,7 +48,8 @@ jobs:
 
       - name: Build plugin
         run: |
-          cmake --build build --config Release --parallel
+          cmake --build build --config Release --parallel \
+            --target FunkyMooseMixAnalyzer_VST3 FunkyMooseMixAnalyzer_AU FunkyMooseMixAnalyzerAllTests
 
       - name: Run analysis tests
         run: |
@@ -173,7 +174,8 @@ jobs:
       - name: Build plugin
         shell: pwsh
         run: |
-          cmake --build build --config Release --parallel
+          cmake --build build --config Release --parallel `
+            --target FunkyMooseMixAnalyzer_VST3 FunkyMooseMixAnalyzerAllTests
 
       - name: Run analysis tests
         shell: pwsh

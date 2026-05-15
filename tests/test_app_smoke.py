@@ -11,6 +11,7 @@ TEST_DATA_DIR = tempfile.mkdtemp(prefix="mix-analyzer-test-")
 os.environ["MIX_ANALYZER_DATA_DIR"] = TEST_DATA_DIR
 
 import app as mix_app
+from core.plugin_bridge import PluginBridge
 
 
 def make_slice(tag="Intro", start=0.0, duration=10.0):
@@ -92,6 +93,39 @@ class AppSmokeTest(unittest.TestCase):
         self.assertEqual(mix_app.get_target_lufs("Broadcast / TV"), -23)
         self.assertEqual(mix_app.get_target_lufs("Podcast / Spoken Word"), -16)
         self.assertEqual(mix_app.get_target_lufs("Unknown"), -14)
+
+    def test_plugin_bridge_keeps_worst_case_safety_metrics(self):
+        bridge = PluginBridge()
+        args = [
+            -14.0, -13.0, -12.0, -1.8, 6.0, 10.0,
+            0.7, 65.0, -0.4, 0.01, 0.2,
+            2500.0, 12000.0, 4200.0, 4.0,
+            5.0, 8.0, 12.0, 30.0, 24.0, 8.0,
+            91, "ready", "Full pass OK", 96,
+            180.0, 1, 0.4,
+        ]
+
+        bridge._handle_metrics("/fmma/metrics", *args)
+
+        metrics = bridge.get_latest_metrics()
+        self.assertEqual(metrics["safety"]["worstTruePeak"], 0.2)
+        self.assertEqual(metrics["safety"]["worstClipping"], 0.4)
+
+    def test_plugin_bridge_defaults_worst_clipping_for_older_messages(self):
+        bridge = PluginBridge()
+        args = [
+            -14.0, -13.0, -12.0, -1.8, 6.0, 10.0,
+            0.7, 65.0, -0.4, 0.03, -0.9,
+            2500.0, 12000.0, 4200.0, 4.0,
+            5.0, 8.0, 12.0, 30.0, 24.0, 8.0,
+            91, "ready", "Full pass OK", 96,
+            180.0, 1,
+        ]
+
+        bridge._handle_metrics("/fmma/metrics", *args)
+
+        metrics = bridge.get_latest_metrics()
+        self.assertEqual(metrics["safety"]["worstClipping"], 0.03)
 
     def test_summary_uses_profile_ranges_and_confidence(self):
         slices = [{

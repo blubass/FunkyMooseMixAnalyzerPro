@@ -27,14 +27,27 @@ private:
     void copyReportToClipboard();
     void copyJsonReportToClipboard();
     juce::String buildTextReport() const;
+    juce::String buildTextReport(const fmma::AnalyzerMetrics& sourceMetrics,
+                                 const fmma::MixAssessmentInput& input,
+                                 const fmma::MixAssessment& sourceAssessment) const;
     juce::String buildJsonReport() const;
+    juce::String buildJsonReport(const fmma::AnalyzerMetrics& sourceMetrics,
+                                 const fmma::MixAssessmentInput& input,
+                                 const fmma::MixAssessment& sourceAssessment) const;
     juce::String formatDuration(float seconds) const;
     juce::String formatSigned(float value, const juce::String& suffix, int decimals = 1) const;
     juce::String formatDeliveryPreview(float targetLufs) const;
+    juce::String formatDeliveryPreview(float targetLufs, const fmma::AnalyzerMetrics& sourceMetrics) const;
     juce::String referenceNote() const;
+    juce::String referenceNote(const fmma::AnalyzerMetrics& sourceMetrics,
+                               const fmma::MixAssessment& sourceAssessment) const;
     juce::String referenceActionNote() const;
+    juce::String referenceActionNote(const fmma::AnalyzerMetrics& sourceMetrics,
+                                     const fmma::MixAssessment& sourceAssessment) const;
     juce::String snapshotNote() const;
     juce::String mixDoctorSummary() const;
+    juce::String mixDoctorSummary(const fmma::AnalyzerMetrics& sourceMetrics,
+                                  const fmma::MixAssessment& sourceAssessment) const;
     fmma::MixAssessmentInput makeAssessmentInput() const;
     void smoothDisplayMetrics(const fmma::AnalyzerMetrics& raw);
     void syncStoredSnapshotsFromProcessor();

@@ -279,10 +279,10 @@ FunkyMooseMixAnalyzerAudioProcessor::createParameterLayout()
     return { params.begin(), params.end() };
 }
 
-void FunkyMooseMixAnalyzerAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
+void FunkyMooseMixAnalyzerAudioProcessor::prepareToPlay(double newSampleRate, int samplesPerBlock)
 {
-    currentSampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
-    configureBandFilters(currentSampleRate);
+    currentSampleRate = newSampleRate > 0.0 ? newSampleRate : 48000.0;
+    configureBandFilters(currentSampleRate, samplesPerBlock);
     configureLoudnessMeter(currentSampleRate, samplesPerBlock);
 }
 
@@ -325,9 +325,10 @@ void FunkyMooseMixAnalyzerAudioProcessor::requestFullPassFinish() noexcept
     fullPassFinishRequested.store(true, std::memory_order_release);
 }
 
-void FunkyMooseMixAnalyzerAudioProcessor::configureBandFilters(double newSampleRate)
+void FunkyMooseMixAnalyzerAudioProcessor::configureBandFilters(double newSampleRate, int samplesPerBlock)
 {
-    juce::dsp::ProcessSpec spec { newSampleRate, 512, 1 };
+    const auto processBlockSize = static_cast<juce::uint32>(juce::jmax(1, samplesPerBlock));
+    juce::dsp::ProcessSpec spec { newSampleRate, processBlockSize, 1 };
 
     for (auto i = 0; i < fmma::bandCount; ++i)
     {
@@ -356,8 +357,8 @@ void FunkyMooseMixAnalyzerAudioProcessor::configureBandFilters(double newSampleR
 
 void FunkyMooseMixAnalyzerAudioProcessor::configureLoudnessMeter(double newSampleRate, int samplesPerBlock)
 {
-    const auto blockSize = static_cast<juce::uint32>(juce::jmax(1, samplesPerBlock));
-    juce::dsp::ProcessSpec monoSpec { newSampleRate, blockSize, 1 };
+    const auto processBlockSize = static_cast<juce::uint32>(juce::jmax(1, samplesPerBlock));
+    juce::dsp::ProcessSpec monoSpec { newSampleRate, processBlockSize, 1 };
 
     const auto preFilterCoefficients = juce::dsp::IIR::Coefficients<float>::makeHighShelf(
         newSampleRate,
@@ -411,7 +412,7 @@ void FunkyMooseMixAnalyzerAudioProcessor::configureLoudnessMeter(double newSampl
         juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
         false,
         true);
-    truePeakOversampler->initProcessing(static_cast<size_t>(blockSize));
+    truePeakOversampler->initProcessing(processBlockSize);
     truePeakOversampler->reset();
 
     resetMeterState();
@@ -918,9 +919,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::processBlock(juce::AudioBuffer<float>&
     const auto numSamples = buffer.getNumSamples();
 
     auto hostPlayingNow = false;
-    if (auto* playHead = getPlayHead())
+    if (auto* currentPlayHead = getPlayHead())
     {
-        const auto position = playHead->getPosition();
+        const auto position = currentPlayHead->getPosition();
         if (position.hasValue())
             hostPlayingNow = position->getIsPlaying();
     }

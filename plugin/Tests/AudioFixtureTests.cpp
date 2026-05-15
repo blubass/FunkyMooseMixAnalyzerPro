@@ -8,8 +8,8 @@
 
 namespace
 {
-constexpr double sampleRate = 48000.0;
-constexpr int blockSize = 512;
+constexpr double testSampleRate = 48000.0;
+constexpr int testBlockSize = 512;
 constexpr float pi = juce::MathConstants<float>::pi;
 
 int failures = 0;
@@ -106,13 +106,13 @@ void expectStoredMetricMatches(const fmma::AnalyzerMetrics& actual,
 
 float sineSample(int sample, float frequency, float peakGain, float phaseRadians = 0.0f)
 {
-    const auto phase = (2.0f * pi * frequency * static_cast<float>(sample) / static_cast<float>(sampleRate)) + phaseRadians;
+    const auto phase = (2.0f * pi * frequency * static_cast<float>(sample) / static_cast<float>(testSampleRate)) + phaseRadians;
     return peakGain * std::sin(phase);
 }
 
 juce::AudioBuffer<float> makeBuffer(float seconds)
 {
-    return juce::AudioBuffer<float> { 2, static_cast<int>(std::round(seconds * sampleRate)) };
+    return juce::AudioBuffer<float> { 2, static_cast<int>(std::round(seconds * testSampleRate)) };
 }
 
 juce::AudioBuffer<float> makeStereoSine(float seconds, float frequency, float peakGain)
@@ -175,7 +175,7 @@ juce::File writeWavFixture(const juce::AudioBuffer<float>& buffer, const juce::S
         return file;
 
     const auto writerOptions = juce::AudioFormatWriterOptions {}
-        .withSampleRate(sampleRate)
+        .withSampleRate(testSampleRate)
         .withNumChannels(buffer.getNumChannels())
         .withBitsPerSample(24);
     auto writer = format.createWriterFor(stream, writerOptions);
@@ -215,8 +215,8 @@ juce::AudioBuffer<float> readWavFixture(const juce::File& file)
 std::unique_ptr<FunkyMooseMixAnalyzerAudioProcessor> makePreparedProcessor()
 {
     auto processor = std::make_unique<FunkyMooseMixAnalyzerAudioProcessor>();
-    processor->setPlayConfigDetails(2, 2, sampleRate, blockSize);
-    processor->prepareToPlay(sampleRate, blockSize);
+    processor->setPlayConfigDetails(2, 2, testSampleRate, testBlockSize);
+    processor->prepareToPlay(testSampleRate, testBlockSize);
     return processor;
 }
 
@@ -232,7 +232,7 @@ fmma::AnalyzerMetrics analyseFixture(const juce::AudioBuffer<float>& source, boo
 
     while (offset < source.getNumSamples())
     {
-        const auto samplesThisBlock = juce::jmin(blockSize, source.getNumSamples() - offset);
+        const auto samplesThisBlock = juce::jmin(testBlockSize, source.getNumSamples() - offset);
         juce::AudioBuffer<float> block { 2, samplesThisBlock };
         for (auto channel = 0; channel < 2; ++channel)
             block.copyFrom(channel, 0, source, juce::jmin(channel, source.getNumChannels() - 1), offset, samplesThisBlock);
@@ -244,7 +244,7 @@ fmma::AnalyzerMetrics analyseFixture(const juce::AudioBuffer<float>& source, boo
     if (asFullPass)
     {
         processor->requestFullPassFinish();
-        juce::AudioBuffer<float> flushBlock { 2, blockSize };
+        juce::AudioBuffer<float> flushBlock { 2, testBlockSize };
         flushBlock.clear();
         processor->processBlock(flushBlock, midi);
     }
@@ -367,13 +367,13 @@ void phaseCorrelationFixtureTestsPhase()
 {
     auto processor = makePreparedProcessor();
 
-    juce::AudioBuffer<float> buffer(2, blockSize);
+    juce::AudioBuffer<float> buffer(2, testBlockSize);
     buffer.clear();
 
     // Generate in-phase sine waves
-    for (int i = 0; i < blockSize; ++i)
+    for (int i = 0; i < testBlockSize; ++i)
     {
-        const auto sample = static_cast<float>(std::sin(2.0f * pi * 440.0f * i / sampleRate) * 0.1f);
+        const auto sample = static_cast<float>(std::sin(2.0f * pi * 440.0f * i / testSampleRate) * 0.1f);
         buffer.setSample(0, i, sample);
         buffer.setSample(1, i, sample);
     }
@@ -389,9 +389,9 @@ void phaseCorrelationFixtureTestsPhase()
     expectNear(metrics.phaseCorrelation, 1.0f, 0.1f, "In-phase signals should have high phase correlation");
 
     // Generate out-of-phase
-    for (int i = 0; i < blockSize; ++i)
+    for (int i = 0; i < testBlockSize; ++i)
     {
-        const auto sample = static_cast<float>(std::sin(2.0f * pi * 440.0f * i / sampleRate) * 0.1f);
+        const auto sample = static_cast<float>(std::sin(2.0f * pi * 440.0f * i / testSampleRate) * 0.1f);
         buffer.setSample(0, i, sample);
         buffer.setSample(1, i, -sample);
     }

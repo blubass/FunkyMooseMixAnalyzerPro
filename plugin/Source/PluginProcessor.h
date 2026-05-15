@@ -67,7 +67,7 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
-    void configureBandFilters(double newSampleRate);
+    void configureBandFilters(double newSampleRate, int samplesPerBlock);
     void timerCallback() override;
     void configureLoudnessMeter(double newSampleRate, int samplesPerBlock);
     void pushLoudnessPower(double power) noexcept;

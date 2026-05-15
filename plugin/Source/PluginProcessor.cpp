@@ -255,7 +255,9 @@ FunkyMooseMixAnalyzerAudioProcessor::FunkyMooseMixAnalyzerAudioProcessor()
     for (auto& band : bandSideRatiosDb)
         band.store(-120.0f, std::memory_order_relaxed);
 
-    startTimerHz(6); // Match UI refresh rate
+#ifndef MIX_ANALYZER_HEADLESS_TESTS
+    startTimerHz(6);
+#endif
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout

@@ -212,11 +212,11 @@ juce::AudioBuffer<float> readWavFixture(const juce::File& file)
     return buffer;
 }
 
-std::unique_ptr<FunkyMooseMixAnalyzerAudioProcessor> makePreparedProcessor()
+std::unique_ptr<FunkyMooseMixAnalyzerAudioProcessor> makePreparedProcessor(int preparedBlockSize = testBlockSize)
 {
     auto processor = std::make_unique<FunkyMooseMixAnalyzerAudioProcessor>();
-    processor->setPlayConfigDetails(2, 2, testSampleRate, testBlockSize);
-    processor->prepareToPlay(testSampleRate, testBlockSize);
+    processor->setPlayConfigDetails(2, 2, testSampleRate, preparedBlockSize);
+    processor->prepareToPlay(testSampleRate, preparedBlockSize);
     return processor;
 }
 
@@ -365,41 +365,46 @@ void storedAnalysisStateRoundTrips()
 
 void phaseCorrelationFixtureTestsPhase()
 {
-    auto processor = makePreparedProcessor();
+    constexpr auto oddHostBlockSize = 137;
+    constexpr auto phaseBlocks = 40;
+    auto processor = makePreparedProcessor(oddHostBlockSize);
 
-    juce::AudioBuffer<float> buffer(2, testBlockSize);
+    juce::AudioBuffer<float> buffer(2, oddHostBlockSize);
     buffer.clear();
 
     // Generate in-phase sine waves
-    for (int i = 0; i < testBlockSize; ++i)
+    for (auto block = 0; block < phaseBlocks; ++block)
     {
-        const auto sample = static_cast<float>(std::sin(2.0f * pi * 440.0f * i / testSampleRate) * 0.1f);
-        buffer.setSample(0, i, sample);
-        buffer.setSample(1, i, sample);
-    }
+        for (int i = 0; i < oddHostBlockSize; ++i)
+        {
+            const auto sampleIndex = (block * oddHostBlockSize) + i;
+            const auto sample = static_cast<float>(std::sin(2.0f * pi * 440.0f * sampleIndex / testSampleRate) * 0.1f);
+            buffer.setSample(0, i, sample);
+            buffer.setSample(1, i, sample);
+        }
 
-    // Process multiple blocks to fill FFT buffer
-    juce::MidiBuffer midiBuffer;
-    for (int block = 0; block < 10; ++block)
-    {
+        juce::MidiBuffer midiBuffer;
         processor->processBlock(buffer, midiBuffer);
     }
 
     auto metrics = processor->getMetrics();
     expectNear(metrics.phaseCorrelation, 1.0f, 0.1f, "In-phase signals should have high phase correlation");
 
-    // Generate out-of-phase
-    for (int i = 0; i < testBlockSize; ++i)
-    {
-        const auto sample = static_cast<float>(std::sin(2.0f * pi * 440.0f * i / testSampleRate) * 0.1f);
-        buffer.setSample(0, i, sample);
-        buffer.setSample(1, i, -sample);
-    }
+    processor = makePreparedProcessor(oddHostBlockSize);
 
-    juce::MidiBuffer midiBuffer2;
-    for (int block = 0; block < 10; ++block)
+    // Generate out-of-phase
+    for (auto block = 0; block < phaseBlocks; ++block)
     {
-        processor->processBlock(buffer, midiBuffer2);
+        for (int i = 0; i < oddHostBlockSize; ++i)
+        {
+            const auto sampleIndex = (block * oddHostBlockSize) + i;
+            const auto sample = static_cast<float>(std::sin(2.0f * pi * 440.0f * sampleIndex / testSampleRate) * 0.1f);
+            buffer.setSample(0, i, sample);
+            buffer.setSample(1, i, -sample);
+        }
+
+        juce::MidiBuffer midiBuffer;
+        processor->processBlock(buffer, midiBuffer);
     }
 
     metrics = processor->getMetrics();

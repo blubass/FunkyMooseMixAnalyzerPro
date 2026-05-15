@@ -78,6 +78,7 @@ private:
     float calculateTruePeakDb(const juce::AudioBuffer<float>& buffer, int channelCount) noexcept;
     void pushSpectrumSample(float sample) noexcept;
     void analyseSpectrumFrame() noexcept;
+    void analysePhaseFrame() noexcept;
     void resetMeterState();
     void publishMetric(std::atomic<float>& target, float value, float smoothing = 0.25f) noexcept;
     void appendStoredAnalysisState(juce::ValueTree& state) const;
@@ -148,7 +149,6 @@ private:
     std::array<float, spectrumFftSize * 2> spectrumData {};
     int spectrumFifoIndex = 0;
 
-    // New: For phase correlation
     juce::dsp::FFT phaseFft { spectrumFftOrder };
     std::array<float, spectrumFftSize> phaseFifoLeft {};
     std::array<float, spectrumFftSize> phaseFifoRight {};

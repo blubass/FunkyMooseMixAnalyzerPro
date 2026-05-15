@@ -460,6 +460,11 @@ void FunkyMooseMixAnalyzerAudioProcessor::resetMeterState()
     spectrumFifo.fill(0.0f);
     spectrumData.fill(0.0f);
     spectrumFifoIndex = 0;
+    phaseFifoLeft.fill(0.0f);
+    phaseFifoRight.fill(0.0f);
+    phaseDataLeft.fill(0.0f);
+    phaseDataRight.fill(0.0f);
+    phaseFifoIndex = 0;
 
     momentaryLufs.store(-120.0f, std::memory_order_relaxed);
     shortTermLufs.store(-120.0f, std::memory_order_relaxed);
@@ -496,6 +501,7 @@ void FunkyMooseMixAnalyzerAudioProcessor::resetMeterState()
     worstResonanceFreqHz.store(0.0f, std::memory_order_relaxed);
     worstResonanceGainDb.store(0.0f, std::memory_order_relaxed);
     worstLowMidPercent.store(0.0f, std::memory_order_relaxed);
+    phaseCorrelation.store(1.0f, std::memory_order_relaxed);
     analysisSeconds.store(0.0f, std::memory_order_relaxed);
     fullPassSeconds.store(0.0f, std::memory_order_relaxed);
     fullPassActive.store(false, std::memory_order_relaxed);
@@ -908,6 +914,43 @@ void FunkyMooseMixAnalyzerAudioProcessor::analyseSpectrumFrame() noexcept
     }
 }
 
+void FunkyMooseMixAnalyzerAudioProcessor::analysePhaseFrame() noexcept
+{
+    phaseDataLeft.fill(0.0f);
+    phaseDataRight.fill(0.0f);
+    std::copy(phaseFifoLeft.begin(), phaseFifoLeft.end(), phaseDataLeft.begin());
+    std::copy(phaseFifoRight.begin(), phaseFifoRight.end(), phaseDataRight.begin());
+
+    phaseFft.performRealOnlyForwardTransform(phaseDataLeft.data());
+    phaseFft.performRealOnlyForwardTransform(phaseDataRight.data());
+
+    double phaseCorrSum = 0.0;
+    auto binCount = 0;
+    for (auto i = 0; i < spectrumFftSize / 2; ++i)
+    {
+        const auto bin = static_cast<size_t>(i);
+        const auto imaginaryBin = static_cast<size_t>(i + spectrumFftSize / 2);
+        const auto leftReal = phaseDataLeft[bin];
+        const auto leftImag = phaseDataLeft[imaginaryBin];
+        const auto rightReal = phaseDataRight[bin];
+        const auto rightImag = phaseDataRight[imaginaryBin];
+
+        const auto leftMag = std::sqrt(leftReal * leftReal + leftImag * leftImag);
+        const auto rightMag = std::sqrt(rightReal * rightReal + rightImag * rightImag);
+
+        if (leftMag > 1.0e-6f && rightMag > 1.0e-6f)
+        {
+            const auto leftPhase = std::atan2(leftImag, leftReal);
+            const auto rightPhase = std::atan2(rightImag, rightReal);
+            phaseCorrSum += std::cos(leftPhase - rightPhase);
+            ++binCount;
+        }
+    }
+
+    phaseCorrelation.store(static_cast<float>(binCount > 0 ? phaseCorrSum / static_cast<double>(binCount) : 1.0),
+                           std::memory_order_relaxed);
+}
+
 void FunkyMooseMixAnalyzerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                                        juce::MidiBuffer& midiMessages)
 {
@@ -1073,42 +1116,13 @@ void FunkyMooseMixAnalyzerAudioProcessor::processBlock(juce::AudioBuffer<float>&
         const auto phaseIndex = static_cast<size_t>(phaseFifoIndex);
         phaseFifoLeft[phaseIndex] = l;
         phaseFifoRight[phaseIndex] = r;
-        phaseFifoIndex = (phaseFifoIndex + 1) % spectrumFftSize;
-    }
-
-    if (phaseFifoIndex == 0 && totalInputChannels > 1)
-    {
-        std::copy(phaseFifoLeft.begin(), phaseFifoLeft.end(), phaseDataLeft.begin());
-        std::copy(phaseFifoRight.begin(), phaseFifoRight.end(), phaseDataRight.begin());
-
-        phaseFft.performRealOnlyForwardTransform(phaseDataLeft.data());
-        phaseFft.performRealOnlyForwardTransform(phaseDataRight.data());
-
-        double phaseCorrSum = 0.0;
-        int binCount = 0;
-        for (int i = 0; i < spectrumFftSize / 2; ++i)
+        ++phaseFifoIndex;
+        if (phaseFifoIndex >= spectrumFftSize)
         {
-            const auto bin = static_cast<size_t>(i);
-            const auto imaginaryBin = static_cast<size_t>(i + spectrumFftSize / 2);
-            const auto leftReal = phaseDataLeft[bin];
-            const auto leftImag = phaseDataLeft[imaginaryBin];
-            const auto rightReal = phaseDataRight[bin];
-            const auto rightImag = phaseDataRight[imaginaryBin];
-
-            const auto leftMag = std::sqrt(leftReal * leftReal + leftImag * leftImag);
-            const auto rightMag = std::sqrt(rightReal * rightReal + rightImag * rightImag);
-
-            if (leftMag > 1e-6 && rightMag > 1e-6)
-            {
-                const auto leftPhase = std::atan2(leftImag, leftReal);
-                const auto rightPhase = std::atan2(rightImag, rightReal);
-                const auto phaseDiff = leftPhase - rightPhase;
-                phaseCorrSum += std::cos(phaseDiff);
-                ++binCount;
-            }
+            phaseFifoIndex = 0;
+            if (totalInputChannels > 1)
+                analysePhaseFrame();
         }
-        const auto phaseCorr = binCount > 0 ? phaseCorrSum / binCount : 1.0;
-        phaseCorrelation.store(static_cast<float>(phaseCorr), std::memory_order_relaxed);
     }
 
     const auto n = static_cast<double>(numSamples);

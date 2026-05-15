@@ -109,7 +109,7 @@ struct AnalyzerMetrics
     float worstResonanceFreqHz = 0.0f;
     float worstResonanceGainDb = 0.0f;
     float worstLowMidPercent = 0.0f;
-    float phaseCorrelation = 1.0f; // New: Phase correlation between channels
+    float phaseCorrelation = 1.0f;
     float analysisSeconds = 0.0f;
     float fullPassSeconds = 0.0f;
     bool fullPassActive = false;

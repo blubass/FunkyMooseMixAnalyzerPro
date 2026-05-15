@@ -463,10 +463,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
 
           $vst3 = Get-ChildItem -Path build/FunkyMooseMixAnalyzer_artefacts -Recurse -Directory -Filter "*.vst3" |
+            Where-Object {
+              $_.FullName -match "\\Release\\VST3\\" -and
+              (Test-Path -LiteralPath (Join-Path $_.FullName "Contents\x86_64-win\$($_.Name)"))
+            } |
             Sort-Object { $_.FullName.Length } |
             Select-Object -First 1
           if (-not $vst3) {
-            throw "Missing Windows VST3 bundle."
+            throw "Missing Release Windows VST3 bundle."
           }
           $vst3Dest = Join-Path $packageRoot $vst3.Name
           if (Test-Path -LiteralPath $vst3Dest) {

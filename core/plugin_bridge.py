@@ -1,7 +1,11 @@
 import threading
 import time
 from pythonosc.dispatcher import Dispatcher
-from pythonosc.osc_server import BlockingOSCServer
+
+try:
+    from pythonosc.osc_server import ThreadingOSCUDPServer as OscServer
+except ImportError:  # Older python-osc releases used this name.
+    from pythonosc.osc_server import BlockingOSCUDPServer as OscServer
 
 class PluginBridge:
     def __init__(self, host="127.0.0.1", port=9001):
@@ -10,23 +14,36 @@ class PluginBridge:
         self.metrics = None
         self.last_update = 0
         self.lock = threading.Lock()
-        self._stop_event = threading.Event()
+        self._server = None
         self._server_thread = None
 
     def start(self):
+        if self._server_thread and self._server_thread.is_alive():
+            return True
+
         dispatcher = Dispatcher()
         dispatcher.map("/fmma/metrics", self._handle_metrics)
 
-        self._server = BlockingOSCServer((self.host, self.port), dispatcher)
+        try:
+            self._server = OscServer((self.host, self.port), dispatcher)
+        except OSError as exc:
+            print(f"OSC Bridge disabled on {self.host}:{self.port}: {exc}")
+            self._server = None
+            return False
+
         self._server_thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._server_thread.start()
         print(f"OSC Bridge listening on {self.host}:{self.port}")
+        return True
 
     def stop(self):
         if self._server:
             self._server.shutdown()
-        if self._server_thread:
-            self._server_thread.join()
+            self._server.server_close()
+            self._server = None
+        if self._server_thread and self._server_thread.is_alive():
+            self._server_thread.join(timeout=1.0)
+        self._server_thread = None
 
     def _handle_metrics(self, address, *args):
         # Order must match OscSender.cpp

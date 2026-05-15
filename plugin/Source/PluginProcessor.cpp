@@ -997,55 +997,7 @@ void FunkyMooseMixAnalyzerAudioProcessor::processBlock(juce::AudioBuffer<float>&
     auto transientEnergy = 0.0;
     auto transientAttackMsSum = 0.0;
 
-    // Performance optimization: Use SIMD for summing operations
-    juce::dsp::SIMDRegister<double> sumLeftSIMD(0.0);
-    juce::dsp::SIMDRegister<double> sumRightSIMD(0.0);
-    juce::dsp::SIMDRegister<double> sumLeftSquaresSIMD(0.0);
-    juce::dsp::SIMDRegister<double> sumRightSquaresSIMD(0.0);
-    juce::dsp::SIMDRegister<double> sumLeftRightSIMD(0.0);
-    juce::dsp::SIMDRegister<double> combinedSquaresSIMD(0.0);
-    juce::dsp::SIMDRegister<double> midSquaresSIMD(0.0);
-    juce::dsp::SIMDRegister<double> sideSquaresSIMD(0.0);
-    juce::dsp::SIMDRegister<double> monoSumSIMD(0.0);
-
-    const int vectorSize = juce::dsp::SIMDRegister<double>::size();
-    int sample = 0;
-    for (; sample + vectorSize <= numSamples; sample += vectorSize)
-    {
-        juce::dsp::SIMDRegister<float> lVec = juce::dsp::SIMDRegister<float>::fromRawArray(left + sample);
-        juce::dsp::SIMDRegister<float> rVec = totalInputChannels > 1 ? juce::dsp::SIMDRegister<float>::fromRawArray(right + sample) : lVec;
-
-        juce::dsp::SIMDRegister<double> lDouble = lVec;
-        juce::dsp::SIMDRegister<double> rDouble = rVec;
-
-        sumLeftSIMD += lDouble.sum();
-        sumRightSIMD += rDouble.sum();
-        sumLeftSquaresSIMD += (lDouble * lDouble).sum();
-        sumRightSquaresSIMD += (rDouble * rDouble).sum();
-        sumLeftRightSIMD += (lDouble * rDouble).sum();
-        combinedSquaresSIMD += 0.5 * ((lDouble * lDouble) + (rDouble * rDouble)).sum();
-        juce::dsp::SIMDRegister<double> mid = 0.5 * (lDouble + rDouble);
-        juce::dsp::SIMDRegister<double> side = 0.5 * (lDouble - rDouble);
-        midSquaresSIMD += (mid * mid).sum();
-        sideSquaresSIMD += (side * side).sum();
-        monoSumSIMD += mid.sum();
-
-        // For bands, keep sample-wise for filters
-    }
-
-    // Sum SIMD results
-    sumLeft += sumLeftSIMD.sum();
-    sumRight += sumRightSIMD.sum();
-    sumLeftSquares += sumLeftSquaresSIMD.sum();
-    sumRightSquares += sumRightSquaresSIMD.sum();
-    sumLeftRight += sumLeftRightSIMD.sum();
-    combinedSquares += combinedSquaresSIMD.sum();
-    midSquares += midSquaresSIMD.sum();
-    sideSquares += sideSquaresSIMD.sum();
-    monoSum += monoSumSIMD.sum();
-
-    // Continue with remaining samples and band processing
-    for (; sample < numSamples; ++sample)
+    for (auto sample = 0; sample < numSamples; ++sample)
     {
         const auto l = left[sample];
         const auto r = right[sample];
@@ -1115,13 +1067,12 @@ void FunkyMooseMixAnalyzerAudioProcessor::processBlock(juce::AudioBuffer<float>&
 
         pushLoudnessPower(loudnessPower);
 
-        // New: Collect samples for phase correlation
-        phaseFifoLeft[phaseFifoIndex] = l;
-        phaseFifoRight[phaseFifoIndex] = r;
+        const auto phaseIndex = static_cast<size_t>(phaseFifoIndex);
+        phaseFifoLeft[phaseIndex] = l;
+        phaseFifoRight[phaseIndex] = r;
         phaseFifoIndex = (phaseFifoIndex + 1) % spectrumFftSize;
     }
 
-    // New: Calculate phase correlation if buffer full
     if (phaseFifoIndex == 0 && totalInputChannels > 1)
     {
         std::copy(phaseFifoLeft.begin(), phaseFifoLeft.end(), phaseDataLeft.begin());
@@ -1134,10 +1085,12 @@ void FunkyMooseMixAnalyzerAudioProcessor::processBlock(juce::AudioBuffer<float>&
         int binCount = 0;
         for (int i = 0; i < spectrumFftSize / 2; ++i)
         {
-            const auto leftReal = phaseDataLeft[i];
-            const auto leftImag = phaseDataLeft[i + spectrumFftSize / 2];
-            const auto rightReal = phaseDataRight[i];
-            const auto rightImag = phaseDataRight[i + spectrumFftSize / 2];
+            const auto bin = static_cast<size_t>(i);
+            const auto imaginaryBin = static_cast<size_t>(i + spectrumFftSize / 2);
+            const auto leftReal = phaseDataLeft[bin];
+            const auto leftImag = phaseDataLeft[imaginaryBin];
+            const auto rightReal = phaseDataRight[bin];
+            const auto rightImag = phaseDataRight[imaginaryBin];
 
             const auto leftMag = std::sqrt(leftReal * leftReal + leftImag * leftImag);
             const auto rightMag = std::sqrt(rightReal * rightReal + rightImag * rightImag);
@@ -1152,7 +1105,7 @@ void FunkyMooseMixAnalyzerAudioProcessor::processBlock(juce::AudioBuffer<float>&
             }
         }
         const auto phaseCorr = binCount > 0 ? phaseCorrSum / binCount : 1.0;
-        publishMetric(phaseCorrelation, static_cast<float>(phaseCorr), 0.1f);
+        phaseCorrelation.store(static_cast<float>(phaseCorr), std::memory_order_relaxed);
     }
 
     const auto n = static_cast<double>(numSamples);

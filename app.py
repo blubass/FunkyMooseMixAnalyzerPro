@@ -33,8 +33,11 @@ if getattr(sys, 'frozen', False):
 else:
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
+from core.config import (
     GENRE_PROFILES, GENRE_CURVES, BAND_DEFS, BAND_ALIASES,
-    get_genre_profile, serialize_genre_profile, genre_profiles_payload, get_target_lufs
+    get_genre_profile, serialize_genre_profile, genre_profiles_payload, get_target_lufs,
+    DEFAULT_GENRE, FALLBACK_GENRE, ALLOWED_AUDIO_EXTENSIONS, MAX_UPLOAD_MB,
+    MEDIA_TTL_SECONDS, SLICE_SEC, PROCESS_TIMEOUT_SECONDS
 )
 from core.plugin_bridge import bridge
 
@@ -86,25 +89,18 @@ def get_bin_path(cmd):
     if os.name == "nt" and not cmd.lower().endswith(".exe"):
         names = [f"{cmd}.exe", cmd]
 
-    # 1. Check if we are running in a PyInstaller bundle
+    # 1. Check if we are running in a PyInstaller bundle.
     if getattr(sys, 'frozen', False):
         for name in names:
             bundle_bin = os.path.join(sys._MEIPASS, "bin", name)
             if os.path.exists(bundle_bin):
                 return bundle_bin
-            
+
+    # 2. Check bundled/local binaries next to the app sources.
     for name in names:
-        local_bin = os.path.join(script_dir, "bin", name)
+        local_bin = os.path.join(base_dir, "bin", name)
         if os.path.exists(local_bin):
             return local_bin
-
-@app.route('/api/live-metrics')
-def get_live_metrics():
-    metrics = bridge.get_latest_metrics()
-    if metrics:
-        return jsonify({"status": "connected", "data": metrics})
-    return jsonify({"status": "disconnected"})
-
 
     # 3. Check standard system paths
     for name in names:
@@ -121,6 +117,13 @@ def get_live_metrics():
 
 FFMPEG_CMD = get_bin_path("ffmpeg")
 FFPROBE_CMD = get_bin_path("ffprobe")
+
+@app.route('/api/live-metrics')
+def get_live_metrics():
+    metrics = bridge.get_latest_metrics()
+    if metrics:
+        return jsonify({"status": "connected", "data": metrics})
+    return jsonify({"status": "disconnected"})
 
 def have_ffmpeg():
     try:

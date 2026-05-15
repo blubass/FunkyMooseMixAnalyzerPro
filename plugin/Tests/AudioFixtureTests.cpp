@@ -354,7 +354,6 @@ void storedAnalysisStateRoundTrips()
     expect(! cleared.getStoredSnapshotA(restoredSnapshotA), "cleared snapshot A should stay cleared after state load");
     expect(! cleared.getStoredSnapshotB(restoredSnapshotB), "cleared snapshot B should stay cleared after state load");
 }
-}
 
 void phaseCorrelationFixtureTestsPhase()
 {
@@ -367,15 +366,16 @@ void phaseCorrelationFixtureTestsPhase()
     // Generate in-phase sine waves
     for (int i = 0; i < blockSize; ++i)
     {
-        float sample = std::sin(2.0f * pi * 440.0f * i / sampleRate) * 0.1f;
+        const auto sample = static_cast<float>(std::sin(2.0f * pi * 440.0f * i / sampleRate) * 0.1f);
         buffer.setSample(0, i, sample);
         buffer.setSample(1, i, sample);
     }
 
     // Process multiple blocks to fill FFT buffer
+    juce::MidiBuffer midiBuffer;
     for (int block = 0; block < 10; ++block)
     {
-        processor.processBlock(buffer, {});
+        processor.processBlock(buffer, midiBuffer);
     }
 
     auto metrics = processor.getMetrics();
@@ -384,18 +384,20 @@ void phaseCorrelationFixtureTestsPhase()
     // Generate out-of-phase
     for (int i = 0; i < blockSize; ++i)
     {
-        float sample = std::sin(2.0f * pi * 440.0f * i / sampleRate) * 0.1f;
+        const auto sample = static_cast<float>(std::sin(2.0f * pi * 440.0f * i / sampleRate) * 0.1f);
         buffer.setSample(0, i, sample);
         buffer.setSample(1, i, -sample);
     }
 
+    juce::MidiBuffer midiBuffer2;
     for (int block = 0; block < 10; ++block)
     {
-        processor.processBlock(buffer, {});
+        processor.processBlock(buffer, midiBuffer2);
     }
 
     metrics = processor.getMetrics();
     expectNear(metrics.phaseCorrelation, -1.0f, 0.1f, "Out-of-phase signals should have negative phase correlation");
+}
 }
 
 int main()
@@ -406,6 +408,8 @@ int main()
     spectralFixtureFindsExpectedBand();
     storedAnalysisStateRoundTrips();
     phaseCorrelationFixtureTestsPhase();
+    if (failures == 0)
+    {
         std::cout << "AudioFixtureTests OK\n";
         return 0;
     }

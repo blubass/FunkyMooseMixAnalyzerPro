@@ -32,6 +32,9 @@ endif()
 set(MIX_ANALYZER_PLUGIN_FORMATS VST3 Standalone)
 if(APPLE)
     list(APPEND MIX_ANALYZER_PLUGIN_FORMATS AU)
+    set(MIX_ANALYZER_APP_ICON "${CMAKE_SOURCE_DIR}/../assets/icon.icns")
+else()
+    set(MIX_ANALYZER_APP_ICON "${CMAKE_SOURCE_DIR}/../assets/icon.ico")
 endif()
 
 juce_add_plugin(FunkyMooseMixAnalyzer
@@ -46,7 +49,10 @@ juce_add_plugin(FunkyMooseMixAnalyzer
     PLUGIN_MANUFACTURER_CODE Fnky
     PLUGIN_CODE FmMa
     FORMATS ${MIX_ANALYZER_PLUGIN_FORMATS}
-    PRODUCT_NAME "Funky Moose Mix Analyzer")
+    MICROPHONE_PERMISSION_TEXT "Funky Moose Mix Analyzer needs microphone access to analyze audio input."
+    PRODUCT_NAME "Funky Moose Mix Analyzer"
+    ICON_BIG "${MIX_ANALYZER_APP_ICON}"
+    ICON_SMALL "${MIX_ANALYZER_APP_ICON}")
 
 juce_generate_juce_header(FunkyMooseMixAnalyzer)
 
@@ -105,6 +111,7 @@ if(BUILD_TESTING)
     add_executable(FunkyMooseMixAnalyzerAudioFixtureTests
         Source/AnalysisModel.cpp
         Source/PluginProcessor.cpp
+        Source/IPC/OscSender.cpp
         Tests/AudioFixtureTests.cpp)
 
     target_include_directories(FunkyMooseMixAnalyzerAudioFixtureTests
@@ -124,6 +131,7 @@ if(BUILD_TESTING)
             juce::juce_audio_formats
             juce::juce_audio_processors
             juce::juce_dsp
+            juce::juce_osc
             juce::juce_recommended_config_flags
             juce::juce_recommended_warning_flags)
 

@@ -463,24 +463,30 @@ jobs:
           New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
 
           $vst3 = Get-ChildItem -Path build/FunkyMooseMixAnalyzer_artefacts -Recurse -Directory -Filter "*.vst3" |
+            Sort-Object { $_.FullName.Length } |
             Select-Object -First 1
           if (-not $vst3) {
             throw "Missing Windows VST3 bundle."
           }
-          Copy-Item $vst3.FullName -Destination "$packageRoot\$($vst3.Name)" -Recurse -Force
+          $vst3Dest = Join-Path $packageRoot $vst3.Name
+          if (Test-Path -LiteralPath $vst3Dest) {
+            Remove-Item -LiteralPath $vst3Dest -Recurse -Force
+          }
+          Copy-Item -LiteralPath $vst3.FullName -Destination $vst3Dest -Recurse -Force
 
           $standalone = Get-ChildItem -Path build/FunkyMooseMixAnalyzer_artefacts -Recurse -File -Filter "*.exe" |
             Where-Object { $_.FullName -match "\\Standalone\\" } |
+            Sort-Object FullName |
             Select-Object -First 1
           if (-not $standalone) {
             throw "Missing Windows standalone executable."
           }
-          Copy-Item $standalone.FullName -Destination "$packageRoot\$($standalone.Name)" -Force
+          Copy-Item -LiteralPath $standalone.FullName -Destination "$packageRoot\$($standalone.Name)" -Force
 
           Get-ChildItem -Path $packageRoot -Recurse -File -Filter "moduleinfo.json" |
-            Remove-Item -Force
+            Remove-Item -Force -ErrorAction SilentlyContinue
 
-          Invoke-PluginvalChecked "$packageRoot\$($vst3.Name)"
+          Invoke-PluginvalChecked $vst3Dest
 
           $readme = @'
           Funky Moose Mix Analyzer - Windows Build

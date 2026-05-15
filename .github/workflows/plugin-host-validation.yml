@@ -226,12 +226,13 @@ jobs:
           }
 
           $vst3 = Get-ChildItem -Path build/FunkyMooseMixAnalyzer_artefacts -Recurse -Directory -Filter "*.vst3" |
+            Sort-Object { $_.FullName.Length } |
             Select-Object -First 1
           if (-not $vst3) {
             throw "Missing Windows VST3 bundle."
           }
 
           Get-ChildItem -Path $vst3.FullName -Recurse -File -Filter "moduleinfo.json" |
-            Remove-Item -Force
+            Remove-Item -Force -ErrorAction SilentlyContinue
 
           Invoke-PluginvalChecked $vst3.FullName

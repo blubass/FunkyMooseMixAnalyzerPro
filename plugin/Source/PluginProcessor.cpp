@@ -1329,7 +1329,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::storeReferenceMetrics(const fmma::Anal
         hasStoredReferenceMetrics = true;
     }
 
+#ifndef MIX_ANALYZER_HEADLESS_TESTS
     updateHostDisplay();
+#endif
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::storeSnapshotA(const fmma::AnalyzerMetrics& source)
@@ -1340,7 +1342,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::storeSnapshotA(const fmma::AnalyzerMet
         hasStoredSnapshotA = true;
     }
 
+#ifndef MIX_ANALYZER_HEADLESS_TESTS
     updateHostDisplay();
+#endif
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::storeSnapshotB(const fmma::AnalyzerMetrics& source)
@@ -1351,7 +1355,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::storeSnapshotB(const fmma::AnalyzerMet
         hasStoredSnapshotB = true;
     }
 
+#ifndef MIX_ANALYZER_HEADLESS_TESTS
     updateHostDisplay();
+#endif
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::clearStoredReferenceMetrics()
@@ -1362,7 +1368,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::clearStoredReferenceMetrics()
         hasStoredReferenceMetrics = false;
     }
 
+#ifndef MIX_ANALYZER_HEADLESS_TESTS
     updateHostDisplay();
+#endif
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::clearStoredSnapshots()
@@ -1375,7 +1383,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::clearStoredSnapshots()
         hasStoredSnapshotB = false;
     }
 
+#ifndef MIX_ANALYZER_HEADLESS_TESTS
     updateHostDisplay();
+#endif
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::appendStoredAnalysisState(juce::ValueTree& state) const

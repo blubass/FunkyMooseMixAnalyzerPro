@@ -9,6 +9,7 @@ on:
       - "plugin/CMakeLists.txt"
       - "plugin/Source/AnalysisModel.*"
       - "plugin/Source/PluginProcessor.*"
+      - "plugin/Source/IPC/**"
       - "plugin/Tests/**"
       - ".github/workflows/plugin-analysis-tests.yml"
   pull_request:
@@ -16,6 +17,7 @@ on:
       - "plugin/CMakeLists.txt"
       - "plugin/Source/AnalysisModel.*"
       - "plugin/Source/PluginProcessor.*"
+      - "plugin/Source/IPC/**"
       - "plugin/Tests/**"
       - ".github/workflows/plugin-analysis-tests.yml"
 

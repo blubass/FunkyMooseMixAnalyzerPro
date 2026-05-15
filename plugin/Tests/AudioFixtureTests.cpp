@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <memory>
 
 namespace
 {
@@ -211,14 +212,20 @@ juce::AudioBuffer<float> readWavFixture(const juce::File& file)
     return buffer;
 }
 
+std::unique_ptr<FunkyMooseMixAnalyzerAudioProcessor> makePreparedProcessor()
+{
+    auto processor = std::make_unique<FunkyMooseMixAnalyzerAudioProcessor>();
+    processor->setPlayConfigDetails(2, 2, sampleRate, blockSize);
+    processor->prepareToPlay(sampleRate, blockSize);
+    return processor;
+}
+
 fmma::AnalyzerMetrics analyseFixture(const juce::AudioBuffer<float>& source, bool asFullPass = false)
 {
-    FunkyMooseMixAnalyzerAudioProcessor processor;
-    processor.setPlayConfigDetails(2, 2, sampleRate, blockSize);
-    processor.prepareToPlay(sampleRate, blockSize);
+    auto processor = makePreparedProcessor();
 
     if (asFullPass)
-        processor.requestFullPassStart();
+        processor->requestFullPassStart();
 
     juce::MidiBuffer midi;
     auto offset = 0;
@@ -230,19 +237,19 @@ fmma::AnalyzerMetrics analyseFixture(const juce::AudioBuffer<float>& source, boo
         for (auto channel = 0; channel < 2; ++channel)
             block.copyFrom(channel, 0, source, juce::jmin(channel, source.getNumChannels() - 1), offset, samplesThisBlock);
 
-        processor.processBlock(block, midi);
+        processor->processBlock(block, midi);
         offset += samplesThisBlock;
     }
 
     if (asFullPass)
     {
-        processor.requestFullPassFinish();
+        processor->requestFullPassFinish();
         juce::AudioBuffer<float> flushBlock { 2, blockSize };
         flushBlock.clear();
-        processor.processBlock(flushBlock, midi);
+        processor->processBlock(flushBlock, midi);
     }
 
-    return processor.getMetrics();
+    return processor->getMetrics();
 }
 
 fmma::AnalyzerMetrics analyseWavRoundTrip(const juce::AudioBuffer<float>& source,
@@ -316,56 +323,49 @@ void spectralFixtureFindsExpectedBand()
 
 void storedAnalysisStateRoundTrips()
 {
-    FunkyMooseMixAnalyzerAudioProcessor source;
-    source.setPlayConfigDetails(2, 2, sampleRate, blockSize);
-    source.prepareToPlay(sampleRate, blockSize);
+    auto source = makePreparedProcessor();
 
     const auto reference = makeStoredMetrics(1.0f);
     const auto snapshotA = makeStoredMetrics(2.0f);
     const auto snapshotB = makeStoredMetrics(3.0f);
 
-    source.storeReferenceMetrics(reference);
-    source.storeSnapshotA(snapshotA);
-    source.storeSnapshotB(snapshotB);
+    source->storeReferenceMetrics(reference);
+    source->storeSnapshotA(snapshotA);
+    source->storeSnapshotB(snapshotB);
 
     juce::MemoryBlock state;
-    source.getStateInformation(state);
+    source->getStateInformation(state);
     expect(state.getSize() > 0, "processor state should serialise stored analysis data");
 
-    FunkyMooseMixAnalyzerAudioProcessor restored;
-    restored.setPlayConfigDetails(2, 2, sampleRate, blockSize);
-    restored.prepareToPlay(sampleRate, blockSize);
-    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    auto restored = makePreparedProcessor();
+    restored->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
 
     fmma::AnalyzerMetrics restoredReference;
     fmma::AnalyzerMetrics restoredSnapshotA;
     fmma::AnalyzerMetrics restoredSnapshotB;
-    expect(restored.getStoredReferenceMetrics(restoredReference), "reference metrics should restore from state");
-    expect(restored.getStoredSnapshotA(restoredSnapshotA), "snapshot A should restore from state");
-    expect(restored.getStoredSnapshotB(restoredSnapshotB), "snapshot B should restore from state");
+    expect(restored->getStoredReferenceMetrics(restoredReference), "reference metrics should restore from state");
+    expect(restored->getStoredSnapshotA(restoredSnapshotA), "snapshot A should restore from state");
+    expect(restored->getStoredSnapshotB(restoredSnapshotB), "snapshot B should restore from state");
 
     expectStoredMetricMatches(restoredReference, reference, "reference");
     expectStoredMetricMatches(restoredSnapshotA, snapshotA, "snapshot A");
     expectStoredMetricMatches(restoredSnapshotB, snapshotB, "snapshot B");
 
-    restored.clearStoredReferenceMetrics();
-    restored.clearStoredSnapshots();
+    restored->clearStoredReferenceMetrics();
+    restored->clearStoredSnapshots();
     juce::MemoryBlock clearedState;
-    restored.getStateInformation(clearedState);
+    restored->getStateInformation(clearedState);
 
-    FunkyMooseMixAnalyzerAudioProcessor cleared;
-    cleared.setPlayConfigDetails(2, 2, sampleRate, blockSize);
-    cleared.prepareToPlay(sampleRate, blockSize);
-    cleared.setStateInformation(clearedState.getData(), static_cast<int>(clearedState.getSize()));
-    expect(! cleared.getStoredReferenceMetrics(restoredReference), "cleared reference metrics should stay cleared after state load");
-    expect(! cleared.getStoredSnapshotA(restoredSnapshotA), "cleared snapshot A should stay cleared after state load");
-    expect(! cleared.getStoredSnapshotB(restoredSnapshotB), "cleared snapshot B should stay cleared after state load");
+    auto cleared = makePreparedProcessor();
+    cleared->setStateInformation(clearedState.getData(), static_cast<int>(clearedState.getSize()));
+    expect(! cleared->getStoredReferenceMetrics(restoredReference), "cleared reference metrics should stay cleared after state load");
+    expect(! cleared->getStoredSnapshotA(restoredSnapshotA), "cleared snapshot A should stay cleared after state load");
+    expect(! cleared->getStoredSnapshotB(restoredSnapshotB), "cleared snapshot B should stay cleared after state load");
 }
 
 void phaseCorrelationFixtureTestsPhase()
 {
-    FunkyMooseMixAnalyzerAudioProcessor processor;
-    processor.prepareToPlay(sampleRate, blockSize);
+    auto processor = makePreparedProcessor();
 
     juce::AudioBuffer<float> buffer(2, blockSize);
     buffer.clear();
@@ -382,10 +382,10 @@ void phaseCorrelationFixtureTestsPhase()
     juce::MidiBuffer midiBuffer;
     for (int block = 0; block < 10; ++block)
     {
-        processor.processBlock(buffer, midiBuffer);
+        processor->processBlock(buffer, midiBuffer);
     }
 
-    auto metrics = processor.getMetrics();
+    auto metrics = processor->getMetrics();
     expectNear(metrics.phaseCorrelation, 1.0f, 0.1f, "In-phase signals should have high phase correlation");
 
     // Generate out-of-phase
@@ -399,10 +399,10 @@ void phaseCorrelationFixtureTestsPhase()
     juce::MidiBuffer midiBuffer2;
     for (int block = 0; block < 10; ++block)
     {
-        processor.processBlock(buffer, midiBuffer2);
+        processor->processBlock(buffer, midiBuffer2);
     }
 
-    metrics = processor.getMetrics();
+    metrics = processor->getMetrics();
     expectNear(metrics.phaseCorrelation, -1.0f, 0.1f, "Out-of-phase signals should have negative phase correlation");
 }
 

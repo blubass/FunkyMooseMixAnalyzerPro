@@ -383,11 +383,11 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
             refData.rowHeight = 20.0f;
             refData.metrics = {
                 { "Ref Time",   formatDuration(referenceMetrics.fullPassSeconds > 0.0f ? referenceMetrics.fullPassSeconds : referenceMetrics.analysisSeconds) },
-                { "LUFS \u0394",      formatSigned(metrics.integratedLufs - referenceMetrics.integratedLufs, " LU") },
-                { "Low-End \u0394",  formatSigned(lowEndOf(metrics) - lowEndOf(referenceMetrics), "%") },
-                { "Presence \u0394", formatSigned(presenceOf(metrics) - presenceOf(referenceMetrics), "%") },
-                { "Crest \u0394",    formatSigned(metrics.crestDb - referenceMetrics.crestDb, " dB") },
-                { "Width \u0394",    formatSigned(metrics.widthPct - referenceMetrics.widthPct, "%") }
+                { "LUFS Delta",      formatSigned(metrics.integratedLufs - referenceMetrics.integratedLufs, " LU") },
+                { "Low-End Delta",   formatSigned(lowEndOf(metrics) - lowEndOf(referenceMetrics), "%") },
+                { "Presence Delta",  formatSigned(presenceOf(metrics) - presenceOf(referenceMetrics), "%") },
+                { "Crest Delta",     formatSigned(metrics.crestDb - referenceMetrics.crestDb, " dB") },
+                { "Width Delta",     formatSigned(metrics.widthPct - referenceMetrics.widthPct, "%") }
             };
             refData.noteTitle = "Ref Note";
             refData.noteText  = referenceNote();

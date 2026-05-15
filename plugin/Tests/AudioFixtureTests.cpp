@@ -317,6 +317,9 @@ void spectralFixtureFindsExpectedBand()
 void storedAnalysisStateRoundTrips()
 {
     FunkyMooseMixAnalyzerAudioProcessor source;
+    source.setPlayConfigDetails(2, 2, sampleRate, blockSize);
+    source.prepareToPlay(sampleRate, blockSize);
+
     const auto reference = makeStoredMetrics(1.0f);
     const auto snapshotA = makeStoredMetrics(2.0f);
     const auto snapshotB = makeStoredMetrics(3.0f);
@@ -330,6 +333,8 @@ void storedAnalysisStateRoundTrips()
     expect(state.getSize() > 0, "processor state should serialise stored analysis data");
 
     FunkyMooseMixAnalyzerAudioProcessor restored;
+    restored.setPlayConfigDetails(2, 2, sampleRate, blockSize);
+    restored.prepareToPlay(sampleRate, blockSize);
     restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
 
     fmma::AnalyzerMetrics restoredReference;
@@ -349,6 +354,8 @@ void storedAnalysisStateRoundTrips()
     restored.getStateInformation(clearedState);
 
     FunkyMooseMixAnalyzerAudioProcessor cleared;
+    cleared.setPlayConfigDetails(2, 2, sampleRate, blockSize);
+    cleared.prepareToPlay(sampleRate, blockSize);
     cleared.setStateInformation(clearedState.getData(), static_cast<int>(clearedState.getSize()));
     expect(! cleared.getStoredReferenceMetrics(restoredReference), "cleared reference metrics should stay cleared after state load");
     expect(! cleared.getStoredSnapshotA(restoredSnapshotA), "cleared snapshot A should stay cleared after state load");

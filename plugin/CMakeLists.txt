@@ -32,10 +32,9 @@ endif()
 set(MIX_ANALYZER_PLUGIN_FORMATS VST3 Standalone)
 if(APPLE)
     list(APPEND MIX_ANALYZER_PLUGIN_FORMATS AU)
-    set(MIX_ANALYZER_APP_ICON "${CMAKE_SOURCE_DIR}/../assets/icon.icns")
-else()
-    set(MIX_ANALYZER_APP_ICON "${CMAKE_SOURCE_DIR}/../assets/icon.ico")
 endif()
+set(MIX_ANALYZER_ICON_BIG "${CMAKE_SOURCE_DIR}/../assets/AppIcon.iconset/icon_512x512.png")
+set(MIX_ANALYZER_ICON_SMALL "${CMAKE_SOURCE_DIR}/../assets/AppIcon.iconset/icon_32x32.png")
 
 juce_add_plugin(FunkyMooseMixAnalyzer
     COMPANY_NAME "Funky Moose"
@@ -51,8 +50,8 @@ juce_add_plugin(FunkyMooseMixAnalyzer
     FORMATS ${MIX_ANALYZER_PLUGIN_FORMATS}
     MICROPHONE_PERMISSION_TEXT "Funky Moose Mix Analyzer needs microphone access to analyze audio input."
     PRODUCT_NAME "Funky Moose Mix Analyzer"
-    ICON_BIG "${MIX_ANALYZER_APP_ICON}"
-    ICON_SMALL "${MIX_ANALYZER_APP_ICON}")
+    ICON_BIG "${MIX_ANALYZER_ICON_BIG}"
+    ICON_SMALL "${MIX_ANALYZER_ICON_SMALL}")
 
 juce_generate_juce_header(FunkyMooseMixAnalyzer)
 

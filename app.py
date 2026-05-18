@@ -319,6 +319,8 @@ def plugin_report_to_analysis(report, req_id):
         for name in ["loudness", "dynamics", "stereo", "tone", "delivery"]
     }
     confidence_score = int(max(0, min(100, finite_number(scores.get("confidence"), confidence_payload.get("score", 0)) or 0)))
+    release_gate_payload = assessment.get("releaseGate") if isinstance(assessment.get("releaseGate"), dict) else {}
+    release_gate_blockers = release_gate_payload.get("blockers") if isinstance(release_gate_payload.get("blockers"), list) else []
     measured_lufs = slice_data["I"]
     target_lufs = profile["target_lufs"]
     lufs_delta = round(measured_lufs - target_lufs, 1) if measured_lufs is not None and target_lufs is not None else None
@@ -348,6 +350,13 @@ def plugin_report_to_analysis(report, req_id):
             "label": plugin_confidence_label(assessment.get("confidenceLabel") or confidence_payload.get("label")),
             "issues": [] if assessment.get("measurementReady") else ["plugin-measurement-limited"],
             "domains": confidence_domains,
+        },
+        "release_gate": {
+            "score": int(max(0, min(100, finite_number(scores.get("releaseGate"), release_gate_payload.get("score", 0)) or 0))),
+            "ready": bool(release_gate_payload.get("ready", False)),
+            "title": str(release_gate_payload.get("title") or "Imported plugin release gate"),
+            "text": str(release_gate_payload.get("text") or ""),
+            "blockers": [str(item) for item in release_gate_blockers],
         },
         "aggregate": aggregate,
         "verdict": verdict,

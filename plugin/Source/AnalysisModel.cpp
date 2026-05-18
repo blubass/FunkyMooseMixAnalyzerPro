@@ -462,6 +462,81 @@ void addAction(fmma::MixAssessment& result, const juce::String& action)
     ++result.priorityActionCount;
 }
 
+void addReleaseBlocker(fmma::MixAssessment& result, const juce::String& blocker)
+{
+    if (result.releaseBlockerCount >= static_cast<int>(result.releaseBlockers.size()))
+        return;
+
+    result.releaseBlockers[static_cast<size_t>(result.releaseBlockerCount)] = blocker;
+    ++result.releaseBlockerCount;
+}
+
+void evaluateReleaseGate(fmma::MixAssessment& result,
+                         const fmma::MixAssessmentInput& input,
+                         bool coreChecksOk)
+{
+    result.releaseBlockerCount = 0;
+
+    if (! result.measurementReady)
+        addReleaseBlocker(result, "No reliable measurement yet.");
+    if (! input.fullPassCompleted)
+        addReleaseBlocker(result, "Finish a full pass before release decisions.");
+    if (result.confidenceScore < 75)
+        addReleaseBlocker(result, "Overall confidence is below 75/100.");
+    if (! result.truePeakOk || ! result.clippingOk)
+        addReleaseBlocker(result, "Peak or clipping safety failed.");
+    if (! result.correlationOk || ! result.lowEndPhaseOk)
+        addReleaseBlocker(result, "Mono, stereo, or low-end phase translation failed.");
+    if (! result.lufsOk)
+        addReleaseBlocker(result, "Integrated loudness is outside the selected profile.");
+    if (! result.lowEndOk || ! result.presenceOk || ! result.crestOk || ! result.lraOk)
+        addReleaseBlocker(result, "Tone or dynamics are outside the selected profile.");
+    if (result.overallScore < 80)
+        addReleaseBlocker(result, "Overall mix score is below the release threshold.");
+
+    auto score = static_cast<int>(std::round(result.overallScore * 0.45f
+                                           + result.confidenceScore * 0.25f
+                                           + result.clippingScore * 0.15f
+                                           + result.speakerScore * 0.10f
+                                           + result.headphoneScore * 0.05f));
+
+    if (! input.fullPassCompleted)
+        score = juce::jmin(score, 74);
+    if (! coreChecksOk)
+        score = juce::jmin(score, 69);
+    if (! result.measurementReady)
+        score = juce::jmin(score, 25);
+
+    result.releaseGateScore = juce::jlimit(0, 100, score);
+    result.releaseReady = result.releaseBlockerCount == 0 && coreChecksOk;
+
+    if (result.releaseReady)
+    {
+        result.releaseGateTitle = "Release Ready";
+        result.releaseGateText = "Full pass clears the selected profile and technical safety checks.";
+    }
+    else if (! result.measurementReady)
+    {
+        result.releaseGateTitle = "Measure First";
+        result.releaseGateText = result.releaseBlockers[0];
+    }
+    else if (! input.fullPassCompleted || result.confidenceScore < 75)
+    {
+        result.releaseGateTitle = "Needs Full Pass";
+        result.releaseGateText = result.releaseBlockers[0];
+    }
+    else if (! result.truePeakOk || ! result.clippingOk || ! result.correlationOk || ! result.lowEndPhaseOk)
+    {
+        result.releaseGateTitle = "Blocked";
+        result.releaseGateText = result.releaseBlockers[0];
+    }
+    else
+    {
+        result.releaseGateTitle = "Needs Polish";
+        result.releaseGateText = result.releaseBlockers[0];
+    }
+}
+
 struct ActionCandidate
 {
     juce::String action;
@@ -628,6 +703,7 @@ MixAssessment assessMix(const MixAssessmentInput& input, const GenreProfile& pro
 
     if (! result.measurementReady)
     {
+        evaluateReleaseGate(result, input, false);
         result.verdictKey = "measurement-limited";
         result.verdictTitle = "Warming up";
         result.statusLine = result.confidenceText;
@@ -868,6 +944,8 @@ MixAssessment assessMix(const MixAssessmentInput& input, const GenreProfile& pro
                            && result.clippingOk
                            && result.truePeakOk
                            && result.presenceOk;
+
+    evaluateReleaseGate(result, input, coreChecksOk);
 
     if (coreChecksOk)
     {

@@ -141,6 +141,7 @@ struct MixAssessment
     int stereoConfidenceScore = 0;
     int toneConfidenceScore = 0;
     int deliveryConfidenceScore = 0;
+    int releaseGateScore = 0;
 
     juce::String verdictKey = "measurement-limited";
     juce::String verdictTitle = "Warming up";
@@ -149,6 +150,8 @@ struct MixAssessment
     juce::String confidenceText = "Waiting for usable audio.";
     juce::String confidenceBreakdownText = "Loudness 0, Dynamics 0, Stereo 0, Tone 0, Delivery 0";
     juce::String confidenceCompactText = "0/0/0/0/0";
+    juce::String releaseGateTitle = "Measure first";
+    juce::String releaseGateText = "Run a full pass before release decisions.";
     juce::String analysisScope = "Live";
     juce::String lufsTargetText;
     juce::String lowEndTargetText;
@@ -158,6 +161,8 @@ struct MixAssessment
 
     std::array<juce::String, 5> priorityActions {};
     int priorityActionCount = 0;
+    std::array<juce::String, 6> releaseBlockers {};
+    int releaseBlockerCount = 0;
 
     float lufsDelta = 0.0f;
     float effectivePresenceMax = 38.0f;
@@ -171,6 +176,7 @@ struct MixAssessment
     bool correlationOk = false;
     bool truePeakOk = false;
     bool clippingOk = true;
+    bool releaseReady = false;
 };
 
 juce::StringArray getGenreNames();

@@ -70,6 +70,8 @@ void OscSender::send(const fmma::AnalyzerMetrics& m,
     msg.addInt32(a.stereoConfidenceScore);
     msg.addInt32(a.toneConfidenceScore);
     msg.addInt32(a.deliveryConfidenceScore);
+    msg.addInt32(a.releaseGateScore);
+    msg.addInt32(a.releaseReady ? 1 : 0);
 
     sender.send(msg);
 }

@@ -20,6 +20,17 @@ void expectContains(const juce::String& text, const juce::String& needle, const 
     expect(text.containsIgnoreCase(needle), message);
 }
 
+void expectBlockerContains(const fmma::MixAssessment& result, const juce::String& needle, const char* message)
+{
+    for (auto i = 0; i < result.releaseBlockerCount; ++i)
+    {
+        if (result.releaseBlockers[static_cast<size_t>(i)].containsIgnoreCase(needle))
+            return;
+    }
+
+    expect(false, message);
+}
+
 const fmma::GenreProfile& profileNamed(const char* name)
 {
     for (auto i = 0; i < fmma::getNumGenreProfiles(); ++i)
@@ -93,6 +104,9 @@ void warmupBlocksFinalJudgement()
 
     expect(! result.measurementReady, "empty input should not be measurement-ready");
     expect(result.verdictKey == "measurement-limited", "empty input should stay measurement-limited");
+    expect(! result.releaseReady, "empty input should not pass the release gate");
+    expect(result.releaseGateTitle == "Measure First", "empty input should ask for measurement before release");
+    expectBlockerContains(result, "No reliable measurement", "warmup release gate should explain missing measurement");
     expect(result.priorityActionCount == 1, "warmup should produce exactly one guidance action");
     expectContains(result.priorityActions[0], "Start Pass", "warmup action should ask for Start Pass");
 }
@@ -106,6 +120,10 @@ void healthyFullPassIsReady()
     expect(result.verdictTitle == "Full pass OK", "healthy full pass should get the final-pass verdict");
     expect(result.overallScore >= 85, "healthy full pass should score in a professional-ready range");
     expect(result.confidenceScore >= 90, "healthy full pass should have high confidence");
+    expect(result.releaseReady, "healthy full pass should pass the release gate");
+    expect(result.releaseGateTitle == "Release Ready", "healthy full pass should get release-ready gate title");
+    expect(result.releaseGateScore >= 80, "healthy full pass release gate should be comfortably above threshold");
+    expect(result.releaseBlockerCount == 0, "healthy full pass should not have release blockers");
     expect(result.loudnessConfidenceScore >= 90, "healthy full pass should have high loudness confidence");
     expect(result.dynamicsConfidenceScore >= 90, "healthy full pass should have high dynamics confidence");
     expect(result.stereoConfidenceScore >= 90, "healthy full pass should have high stereo confidence");
@@ -133,6 +151,9 @@ void domainConfidenceTracksMissingToneEvidence()
 
     expect(result.measurementReady, "short but valid input should be measurement-ready");
     expect(result.confidenceScore < 75, "short section without spectral evidence should not get final confidence");
+    expect(! result.releaseReady, "short section should not pass the release gate");
+    expect(result.releaseGateTitle == "Needs Full Pass", "short section should ask for a full pass");
+    expectBlockerContains(result, "Finish a full pass", "short section release gate should require full pass");
     expect(result.toneConfidenceScore < result.loudnessConfidenceScore,
            "tone confidence should drop when spectral evidence is missing");
     expectContains(result.confidenceBreakdownText, "Tone", "confidence breakdown should expose the weak tone domain");
@@ -149,6 +170,8 @@ void clippingDominatesActions()
     const auto result = fmma::assessMix(input, profileNamed("Streaming / General"));
 
     expect(result.verdictKey == "needs-attention", "clipped pass should need attention");
+    expect(! result.releaseReady, "clipped pass should not pass the release gate");
+    expectBlockerContains(result, "Peak or clipping", "clipped pass release gate should block on safety");
     expect(! result.truePeakOk, "clipped pass should fail true peak");
     expect(! result.clippingOk, "clipped pass should fail sample clipping");
     expect(result.priorityActionCount >= 2, "clipped pass should produce peak and clipping actions");
@@ -165,6 +188,8 @@ void lowEndPhaseIsAReleaseBlocker()
     const auto result = fmma::assessMix(input, profileNamed("Streaming / General"));
 
     expect(result.verdictKey == "needs-attention", "unsafe low-end phase should need attention");
+    expect(! result.releaseReady, "unsafe low-end phase should not pass the release gate");
+    expectBlockerContains(result, "phase translation", "unsafe low-end phase release gate should block translation");
     expect(! result.lowEndPhaseOk, "unsafe low-end phase should fail the target");
     expectContains(result.priorityActions[0], "Low-end phase", "low-end phase should become a priority action");
 }

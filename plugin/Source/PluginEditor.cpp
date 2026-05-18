@@ -332,6 +332,8 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
     targetsData.title = "Targets";
     targetsData.fontHeight = 13.0f;
     targetsData.items = {
+        { "Release Gate: " + assessment.releaseGateTitle + " (" + juce::String(assessment.releaseGateScore) + "/100)",
+          Theme::okColour(assessment.releaseReady), 10.0f },
         { assessment.lufsTargetText, Theme::okColour(assessment.lufsOk), 10.0f },
         { assessment.lowEndTargetText, Theme::okColour(assessment.lowEndOk), 10.0f },
         { "Low phase: corr >= 0.65, side <= -6 dB", Theme::okColour(assessment.lowEndPhaseOk), 10.0f },
@@ -832,6 +834,16 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
     report << "Confidence: " << sourceAssessment.confidenceLabel << " (" << sourceAssessment.confidenceScore << "/100)\n";
     report << "Confidence Domains: " << sourceAssessment.confidenceBreakdownText << "\n";
     report << "Confidence Note: " << sourceAssessment.confidenceText << "\n";
+    report << "Release Gate: " << sourceAssessment.releaseGateTitle << " ("
+           << sourceAssessment.releaseGateScore << "/100, "
+           << (sourceAssessment.releaseReady ? "ready" : "blocked") << ")\n";
+    report << "Release Gate Note: " << sourceAssessment.releaseGateText << "\n";
+    if (sourceAssessment.releaseBlockerCount > 0)
+    {
+        report << "Release Blockers:\n";
+        for (auto i = 0; i < sourceAssessment.releaseBlockerCount; ++i)
+            report << "- " << sourceAssessment.releaseBlockers[static_cast<size_t>(i)] << "\n";
+    }
     report << "Verdict: " << sourceAssessment.verdictTitle << "\n";
     report << "Mix Score: " << sourceAssessment.overallScore << "/100\n";
     report << "Mix Doctor Summary: " << mixDoctorSummary(sourceMetrics, sourceAssessment) << "\n";
@@ -1038,6 +1050,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     setJsonProperty(scores, "stereoConfidence", sourceAssessment.stereoConfidenceScore);
     setJsonProperty(scores, "toneConfidence", sourceAssessment.toneConfidenceScore);
     setJsonProperty(scores, "deliveryConfidence", sourceAssessment.deliveryConfidenceScore);
+    setJsonProperty(scores, "releaseGate", sourceAssessment.releaseGateScore);
     setJsonProperty(scores, "lufs", sourceAssessment.lufsScore);
     setJsonProperty(scores, "correlation", sourceAssessment.correlationScore);
     setJsonProperty(scores, "lowEnd", sourceAssessment.lowEndScore);
@@ -1070,6 +1083,16 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     setJsonProperty(confidenceDomains, "delivery", sourceAssessment.deliveryConfidenceScore);
     setJsonProperty(confidenceJson, "domains", confidenceDomains);
     setJsonProperty(assessmentJson, "confidence", confidenceJson);
+    auto releaseGateJson = juce::var { new juce::DynamicObject() };
+    setJsonProperty(releaseGateJson, "score", sourceAssessment.releaseGateScore);
+    setJsonProperty(releaseGateJson, "ready", sourceAssessment.releaseReady);
+    setJsonProperty(releaseGateJson, "title", sourceAssessment.releaseGateTitle);
+    setJsonProperty(releaseGateJson, "text", sourceAssessment.releaseGateText);
+    juce::Array<juce::var> releaseBlockers;
+    for (auto i = 0; i < sourceAssessment.releaseBlockerCount; ++i)
+        releaseBlockers.add(sourceAssessment.releaseBlockers[static_cast<size_t>(i)]);
+    setJsonProperty(releaseGateJson, "blockers", releaseBlockers);
+    setJsonProperty(assessmentJson, "releaseGate", releaseGateJson);
     setJsonProperty(assessmentJson, "measurementReady", sourceAssessment.measurementReady);
     setJsonProperty(assessmentJson, "summary", mixDoctorSummary(sourceMetrics, sourceAssessment));
 

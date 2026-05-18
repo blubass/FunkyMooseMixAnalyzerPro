@@ -71,6 +71,7 @@ class PluginBridge:
         # fullPassCompleted (int) -> 26
         # worstClippedPercent (float) -> 27
         # confidence domains (5 ints) -> 28, 29, 30, 31, 32
+        # release gate score / ready -> 33, 34
 
         if len(args) < 27:
             return
@@ -84,6 +85,12 @@ class PluginBridge:
                 "stereo": int(args[30]),
                 "tone": int(args[31]),
                 "delivery": int(args[32]),
+            }
+        release_gate = None
+        if len(args) >= 35:
+            release_gate = {
+                "score": int(args[33]),
+                "ready": bool(args[34]),
             }
 
         with self.lock:
@@ -118,7 +125,8 @@ class PluginBridge:
                     "verdictKey": args[22],
                     "verdictTitle": args[23],
                     "confidence": args[24],
-                    "confidenceDomains": confidence_domains
+                    "confidenceDomains": confidence_domains,
+                    "releaseGate": release_gate
                 },
                 "state": {
                     "duration": args[25],

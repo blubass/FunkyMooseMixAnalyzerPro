@@ -33,6 +33,20 @@ void expectNear(float actual, float expected, float tolerance, const juce::Strin
     ++failures;
 }
 
+const fmma::GenreProfile& profileNamed(const char* name)
+{
+    for (auto i = 0; i < fmma::getNumGenreProfiles(); ++i)
+    {
+        const auto& profile = fmma::getGenreProfile(i);
+        if (juce::String(profile.name) == name)
+            return profile;
+    }
+
+    std::cerr << "FAIL: missing profile " << name << '\n';
+    ++failures;
+    return fmma::getGenreProfile(0);
+}
+
 fmma::AnalyzerMetrics makeStoredMetrics(float seed)
 {
     fmma::AnalyzerMetrics metrics;
@@ -267,6 +281,48 @@ fmma::AnalyzerMetrics analyseWavRoundTrip(const juce::AudioBuffer<float>& source
     return analyseFixture(loaded, asFullPass);
 }
 
+fmma::MixAssessmentInput makeAssessmentInputFromMetrics(const fmma::AnalyzerMetrics& metrics)
+{
+    fmma::MixAssessmentInput input;
+    input.integratedLufs = metrics.integratedLufs;
+    input.crestDb = metrics.crestDb;
+    input.correlation = metrics.correlation;
+    input.msRatioDb = metrics.msRatioDb;
+    input.monoLossDb = metrics.monoLossDb;
+    input.truePeakDb = metrics.truePeakDb;
+    input.clippedPercent = metrics.clippedPercent;
+    input.worstTruePeakDb = metrics.worstTruePeakDb;
+    input.worstCorrelation = metrics.worstCorrelation;
+    input.worstMonoLossDb = metrics.worstMonoLossDb;
+    input.worstClippedPercent = metrics.worstClippedPercent;
+    input.worstLowMidPercent = metrics.worstLowMidPercent;
+    input.worstResonanceFreqHz = metrics.worstResonanceFreqHz;
+    input.worstResonanceGainDb = metrics.worstResonanceGainDb;
+    input.subPercent = metrics.bandPercents[0];
+    input.bassPercent = metrics.bandPercents[1];
+    input.lowMidPercent = metrics.bandPercents[2];
+    input.midPercent = metrics.bandPercents[3];
+    input.lowEndPercent = fmma::lowEndOf(metrics);
+    input.presencePercent = fmma::presenceOf(metrics);
+    input.airPercent = metrics.bandPercents[5];
+    input.lowEndCorrelation = fmma::lowEndCorrelationOf(metrics);
+    input.lowEndSideDb = fmma::lowEndSideDbOf(metrics);
+    input.widthPct = metrics.widthPct;
+    input.lraLu = metrics.lraLu;
+    input.transientDensity = metrics.transientDensity;
+    input.attackTimeMs = metrics.attackTimeMs;
+    input.spectralCentroidHz = metrics.spectralCentroidHz;
+    input.spectralRolloffHz = metrics.spectralRolloffHz;
+    input.resonanceFreqHz = metrics.resonanceFreqHz;
+    input.resonanceGainDb = metrics.resonanceGainDb;
+    input.analysisSeconds = metrics.analysisSeconds;
+    input.fullPassSeconds = metrics.fullPassSeconds;
+    input.fullPassActive = metrics.fullPassActive;
+    input.fullPassCompleted = metrics.fullPassCompleted;
+    input.analysisFrozen = metrics.analysisFrozen;
+    return input;
+}
+
 void sineFixtureMeasuresLevelAndStereo()
 {
     const auto peakGain = juce::Decibels::decibelsToGain(-12.0f);
@@ -284,6 +340,30 @@ void sineFixtureMeasuresLevelAndStereo()
     expect(metrics.clippedPercent < 0.001f, "clean sine should not report clipping");
     expect(metrics.integratedLufs > -18.0f && metrics.integratedLufs < -9.0f,
            "sine fixture integrated LUFS should be finite and plausible");
+}
+
+void calibrationFixtureProducesExpectedMeterValues()
+{
+    const auto peakGain = juce::Decibels::decibelsToGain(-12.0f);
+    const auto metrics = analyseWavRoundTrip(makeStereoSine(30.0f, 1000.0f, peakGain),
+                                             "calibration_1k_minus12",
+                                             true);
+
+    expect(metrics.fullPassCompleted, "calibration fixture full pass should complete");
+    expectNear(metrics.analysisSeconds, 30.0f, 0.02f, "calibration fixture duration should match source");
+    expectNear(metrics.peakDb, -12.0f, 0.5f, "calibration fixture sample peak should match -12 dBFS");
+    expectNear(metrics.rmsDb, -15.0f, 0.6f, "calibration fixture RMS should match 1 kHz sine RMS");
+    expectNear(metrics.crestDb, 3.0f, 0.6f, "calibration fixture crest should match 1 kHz sine crest");
+    expectNear(metrics.truePeakHoldDb, -12.0f, 0.5f, "calibration fixture true peak should match known peak");
+    expect(metrics.bandPercents[3] > 60.0f, "1 kHz calibration fixture should dominate the mids band");
+    expect(metrics.clippedPercent < 0.001f, "calibration fixture should stay unclipped");
+
+    const auto result = fmma::assessMix(makeAssessmentInputFromMetrics(metrics), profileNamed("Streaming / General"));
+    expect(result.loudnessConfidenceScore >= 70, "calibration fixture should produce usable loudness confidence");
+    expect(result.dynamicsConfidenceScore >= 80, "calibration fixture should produce usable dynamics confidence");
+    expect(result.stereoConfidenceScore >= 80, "calibration fixture should produce usable stereo confidence");
+    expect(result.toneConfidenceScore >= 68, "calibration fixture should produce usable tone confidence");
+    expect(result.deliveryConfidenceScore >= 90, "calibration fixture should produce high delivery confidence");
 }
 
 void antiPhaseFixtureFlagsMonoLoss()
@@ -424,6 +504,7 @@ int main()
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
 
     runFixtureTest("sineFixtureMeasuresLevelAndStereo", sineFixtureMeasuresLevelAndStereo);
+    runFixtureTest("calibrationFixtureProducesExpectedMeterValues", calibrationFixtureProducesExpectedMeterValues);
     runFixtureTest("antiPhaseFixtureFlagsMonoLoss", antiPhaseFixtureFlagsMonoLoss);
     runFixtureTest("clippedFixtureFlagsPeaks", clippedFixtureFlagsPeaks);
     runFixtureTest("spectralFixtureFindsExpectedBand", spectralFixtureFindsExpectedBand);

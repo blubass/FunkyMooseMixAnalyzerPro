@@ -65,6 +65,11 @@ void OscSender::send(const fmma::AnalyzerMetrics& m,
     msg.addFloat32(m.analysisSeconds);
     msg.addInt32(m.fullPassCompleted ? 1 : 0);
     msg.addFloat32(m.worstClippedPercent);
+    msg.addInt32(a.loudnessConfidenceScore);
+    msg.addInt32(a.dynamicsConfidenceScore);
+    msg.addInt32(a.stereoConfidenceScore);
+    msg.addInt32(a.toneConfidenceScore);
+    msg.addInt32(a.deliveryConfidenceScore);
 
     sender.send(msg);
 }

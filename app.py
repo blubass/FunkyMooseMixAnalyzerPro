@@ -312,7 +312,13 @@ def plugin_report_to_analysis(report, req_id):
         "imported_report": True,
     }
 
-    confidence_score = int(max(0, min(100, finite_number(scores.get("confidence"), 0) or 0)))
+    confidence_payload = assessment.get("confidence") if isinstance(assessment.get("confidence"), dict) else {}
+    confidence_domains_payload = confidence_payload.get("domains") if isinstance(confidence_payload.get("domains"), dict) else {}
+    confidence_domains = {
+        name: int(max(0, min(100, finite_number(confidence_domains_payload.get(name), 0) or 0)))
+        for name in ["loudness", "dynamics", "stereo", "tone", "delivery"]
+    }
+    confidence_score = int(max(0, min(100, finite_number(scores.get("confidence"), confidence_payload.get("score", 0)) or 0)))
     measured_lufs = slice_data["I"]
     target_lufs = profile["target_lufs"]
     lufs_delta = round(measured_lufs - target_lufs, 1) if measured_lufs is not None and target_lufs is not None else None
@@ -339,8 +345,9 @@ def plugin_report_to_analysis(report, req_id):
         "profile": profile,
         "confidence": {
             "score": confidence_score,
-            "label": plugin_confidence_label(assessment.get("confidenceLabel")),
+            "label": plugin_confidence_label(assessment.get("confidenceLabel") or confidence_payload.get("label")),
             "issues": [] if assessment.get("measurementReady") else ["plugin-measurement-limited"],
+            "domains": confidence_domains,
         },
         "aggregate": aggregate,
         "verdict": verdict,

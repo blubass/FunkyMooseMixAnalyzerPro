@@ -20,6 +20,7 @@ public:
         
         juce::String confidenceLabel;
         int confidenceScore = 0;
+        juce::String confidenceCompactText;
         
         float durationSeconds = 0.0f;
         float lufsDelta = 0.0f;

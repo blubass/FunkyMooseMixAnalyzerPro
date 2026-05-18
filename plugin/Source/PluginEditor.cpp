@@ -241,6 +241,7 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
     summaryData.statusLine = assessment.statusLine;
     summaryData.confidenceLabel = assessment.confidenceLabel;
     summaryData.confidenceScore = assessment.confidenceScore;
+    summaryData.confidenceCompactText = assessment.confidenceCompactText;
     summaryData.durationSeconds = metrics.fullPassCompleted ? metrics.fullPassSeconds : metrics.analysisSeconds;
     summaryData.lufsDelta = assessment.lufsDelta;
     
@@ -829,6 +830,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
     report << "Measurement Standard: ITU-R BS.1770-5 / EBU Mode\n";
     report << "Analysis Time: " << formatDuration(sourceMetrics.fullPassCompleted ? sourceMetrics.fullPassSeconds : sourceMetrics.analysisSeconds) << "\n";
     report << "Confidence: " << sourceAssessment.confidenceLabel << " (" << sourceAssessment.confidenceScore << "/100)\n";
+    report << "Confidence Domains: " << sourceAssessment.confidenceBreakdownText << "\n";
     report << "Confidence Note: " << sourceAssessment.confidenceText << "\n";
     report << "Verdict: " << sourceAssessment.verdictTitle << "\n";
     report << "Mix Score: " << sourceAssessment.overallScore << "/100\n";
@@ -1031,6 +1033,11 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     auto scores = juce::var { new juce::DynamicObject() };
     setJsonProperty(scores, "overall", sourceAssessment.overallScore);
     setJsonProperty(scores, "confidence", sourceAssessment.confidenceScore);
+    setJsonProperty(scores, "loudnessConfidence", sourceAssessment.loudnessConfidenceScore);
+    setJsonProperty(scores, "dynamicsConfidence", sourceAssessment.dynamicsConfidenceScore);
+    setJsonProperty(scores, "stereoConfidence", sourceAssessment.stereoConfidenceScore);
+    setJsonProperty(scores, "toneConfidence", sourceAssessment.toneConfidenceScore);
+    setJsonProperty(scores, "deliveryConfidence", sourceAssessment.deliveryConfidenceScore);
     setJsonProperty(scores, "lufs", sourceAssessment.lufsScore);
     setJsonProperty(scores, "correlation", sourceAssessment.correlationScore);
     setJsonProperty(scores, "lowEnd", sourceAssessment.lowEndScore);
@@ -1049,6 +1056,20 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     setJsonProperty(assessmentJson, "statusLine", sourceAssessment.statusLine);
     setJsonProperty(assessmentJson, "confidenceLabel", sourceAssessment.confidenceLabel);
     setJsonProperty(assessmentJson, "confidenceText", sourceAssessment.confidenceText);
+    setJsonProperty(assessmentJson, "confidenceBreakdownText", sourceAssessment.confidenceBreakdownText);
+    setJsonProperty(assessmentJson, "confidenceCompactText", sourceAssessment.confidenceCompactText);
+    auto confidenceJson = juce::var { new juce::DynamicObject() };
+    setJsonProperty(confidenceJson, "score", sourceAssessment.confidenceScore);
+    setJsonProperty(confidenceJson, "label", sourceAssessment.confidenceLabel);
+    setJsonProperty(confidenceJson, "text", sourceAssessment.confidenceText);
+    auto confidenceDomains = juce::var { new juce::DynamicObject() };
+    setJsonProperty(confidenceDomains, "loudness", sourceAssessment.loudnessConfidenceScore);
+    setJsonProperty(confidenceDomains, "dynamics", sourceAssessment.dynamicsConfidenceScore);
+    setJsonProperty(confidenceDomains, "stereo", sourceAssessment.stereoConfidenceScore);
+    setJsonProperty(confidenceDomains, "tone", sourceAssessment.toneConfidenceScore);
+    setJsonProperty(confidenceDomains, "delivery", sourceAssessment.deliveryConfidenceScore);
+    setJsonProperty(confidenceJson, "domains", confidenceDomains);
+    setJsonProperty(assessmentJson, "confidence", confidenceJson);
     setJsonProperty(assessmentJson, "measurementReady", sourceAssessment.measurementReady);
     setJsonProperty(assessmentJson, "summary", mixDoctorSummary(sourceMetrics, sourceAssessment));
 

@@ -229,6 +229,194 @@ int scoreConfidence(const fmma::MixAssessmentInput& input) noexcept
     return juce::jlimit(0, 100, score);
 }
 
+bool hasAudioValue(float value) noexcept
+{
+    return std::isfinite(value) && value > -119.0f;
+}
+
+bool hasPositiveValue(float value) noexcept
+{
+    return std::isfinite(value) && value > 0.0f;
+}
+
+float confidenceDuration(const fmma::MixAssessmentInput& input) noexcept
+{
+    const auto duration = input.fullPassCompleted ? input.fullPassSeconds : input.analysisSeconds;
+    return std::isfinite(duration) ? juce::jmax(0.0f, duration) : 0.0f;
+}
+
+bool hasAnalysedSignal(const fmma::MixAssessmentInput& input) noexcept
+{
+    const auto bandTotal = input.subPercent
+                         + input.bassPercent
+                         + input.lowMidPercent
+                         + input.midPercent
+                         + input.presencePercent
+                         + input.airPercent;
+    return hasAudioValue(input.integratedLufs)
+        || hasAudioValue(input.truePeakDb)
+        || bandTotal > 1.0f;
+}
+
+int durationConfidenceScore(const fmma::MixAssessmentInput& input, float targetSeconds) noexcept
+{
+    const auto duration = confidenceDuration(input);
+    const auto target = juce::jmax(1.0f, targetSeconds);
+    auto score = static_cast<int>(std::round(juce::jlimit(0.0f, 1.0f, duration / target) * 45.0f));
+
+    if (duration >= 8.0f)
+        score += 5;
+    if (duration >= 30.0f)
+        score += 5;
+    if (duration >= 60.0f)
+        score += 5;
+    if (input.fullPassActive)
+        score += 5;
+    if (input.fullPassCompleted)
+        score += duration >= 60.0f ? 15 : 10;
+
+    return juce::jlimit(0, 65, score);
+}
+
+int domainConfidenceScore(const fmma::MixAssessmentInput& input,
+                          float targetSeconds,
+                          int metricScore,
+                          bool finalNeedsFullPass,
+                          bool hasDomainSignal) noexcept
+{
+    if (! hasDomainSignal)
+        return 0;
+
+    auto score = durationConfidenceScore(input, targetSeconds)
+               + juce::jlimit(0, 35, metricScore);
+
+    if (finalNeedsFullPass && ! input.fullPassCompleted)
+        score = juce::jmin(score, input.fullPassActive ? 80 : 74);
+
+    return juce::jlimit(0, 100, score);
+}
+
+void scoreDomainConfidences(fmma::MixAssessment& result, const fmma::MixAssessmentInput& input) noexcept
+{
+    const auto hasSignal = hasAnalysedSignal(input);
+
+    auto loudnessMetric = 0;
+    if (hasAudioValue(input.integratedLufs))
+        loudnessMetric += 24;
+    if (hasPositiveValue(input.lraLu))
+        loudnessMetric += 6;
+    if (hasAudioValue(input.truePeakDb))
+        loudnessMetric += 5;
+    result.loudnessConfidenceScore = domainConfidenceScore(input, 60.0f, loudnessMetric, true,
+                                                           hasAudioValue(input.integratedLufs));
+
+    auto dynamicsMetric = 0;
+    if (std::isfinite(input.crestDb) && input.crestDb > 0.0f)
+        dynamicsMetric += 22;
+    if (hasPositiveValue(input.transientDensity))
+        dynamicsMetric += 5;
+    if (hasPositiveValue(input.attackTimeMs))
+        dynamicsMetric += 4;
+    if (hasPositiveValue(input.lraLu))
+        dynamicsMetric += 4;
+    result.dynamicsConfidenceScore = domainConfidenceScore(input, 45.0f, dynamicsMetric, true, hasSignal);
+
+    auto stereoMetric = 0;
+    if (std::isfinite(input.correlation) && hasSignal)
+        stereoMetric += 18;
+    if (std::isfinite(input.widthPct) && hasSignal)
+        stereoMetric += 5;
+    if (std::isfinite(input.monoLossDb) && hasSignal)
+        stereoMetric += 4;
+    if (std::isfinite(input.lowEndCorrelation) && std::isfinite(input.lowEndSideDb) && hasSignal)
+        stereoMetric += 8;
+    result.stereoConfidenceScore = domainConfidenceScore(input, 45.0f, stereoMetric, true, hasSignal);
+
+    auto toneMetric = 0;
+    const auto bandTotal = input.subPercent
+                         + input.bassPercent
+                         + input.lowMidPercent
+                         + input.midPercent
+                         + input.presencePercent
+                         + input.airPercent;
+    if (bandTotal > 1.0f)
+        toneMetric += 16;
+    if (hasPositiveValue(input.spectralCentroidHz) && hasPositiveValue(input.spectralRolloffHz))
+        toneMetric += 12;
+    if (hasPositiveValue(input.resonanceFreqHz) || hasPositiveValue(input.resonanceGainDb))
+        toneMetric += 4;
+    if (input.lowEndPercent > 0.0f || input.presencePercent > 0.0f)
+        toneMetric += 3;
+    result.toneConfidenceScore = domainConfidenceScore(input, 90.0f, toneMetric, true,
+                                                       hasSignal && (bandTotal > 1.0f || hasPositiveValue(input.spectralCentroidHz)));
+
+    auto deliveryMetric = 0;
+    if (hasAudioValue(input.truePeakDb))
+        deliveryMetric += 20;
+    if (std::isfinite(input.clippedPercent))
+        deliveryMetric += 5;
+    if (hasAudioValue(input.worstTruePeakDb))
+        deliveryMetric += 6;
+    if (std::isfinite(input.worstClippedPercent))
+        deliveryMetric += 4;
+    result.deliveryConfidenceScore = domainConfidenceScore(input, 30.0f, deliveryMetric, true,
+                                                           hasAudioValue(input.truePeakDb));
+}
+
+int combinedConfidenceScore(int baseScore, const fmma::MixAssessment& result) noexcept
+{
+    const auto domainAverage = static_cast<float>(
+        result.loudnessConfidenceScore
+        + result.dynamicsConfidenceScore
+        + result.stereoConfidenceScore
+        + result.toneConfidenceScore
+        + result.deliveryConfidenceScore) / 5.0f;
+
+    return juce::jlimit(0, 100, static_cast<int>(std::round(static_cast<float>(baseScore) * 0.45f
+                                                           + domainAverage * 0.55f)));
+}
+
+juce::String confidenceBreakdownText(const fmma::MixAssessment& result)
+{
+    return "Loudness " + juce::String(result.loudnessConfidenceScore)
+        + ", Dynamics " + juce::String(result.dynamicsConfidenceScore)
+        + ", Stereo " + juce::String(result.stereoConfidenceScore)
+        + ", Tone " + juce::String(result.toneConfidenceScore)
+        + ", Delivery " + juce::String(result.deliveryConfidenceScore);
+}
+
+juce::String confidenceCompactText(const fmma::MixAssessment& result)
+{
+    return juce::String(result.loudnessConfidenceScore)
+        + "/" + juce::String(result.dynamicsConfidenceScore)
+        + "/" + juce::String(result.stereoConfidenceScore)
+        + "/" + juce::String(result.toneConfidenceScore)
+        + "/" + juce::String(result.deliveryConfidenceScore);
+}
+
+struct WeakestConfidenceDomain
+{
+    const char* name = "confidence";
+    int score = 100;
+};
+
+WeakestConfidenceDomain weakestConfidenceDomain(const fmma::MixAssessment& result) noexcept
+{
+    std::array<WeakestConfidenceDomain, 5> domains {{
+        { "loudness", result.loudnessConfidenceScore },
+        { "dynamics", result.dynamicsConfidenceScore },
+        { "stereo", result.stereoConfidenceScore },
+        { "tone", result.toneConfidenceScore },
+        { "delivery", result.deliveryConfidenceScore },
+    }};
+
+    return *std::min_element(domains.begin(), domains.end(),
+                             [] (const WeakestConfidenceDomain& a, const WeakestConfidenceDomain& b)
+                             {
+                                 return a.score < b.score;
+                             });
+}
+
 juce::String confidenceLabelFor(int score, const fmma::MixAssessmentInput& input)
 {
     if (input.fullPassCompleted && score >= 75)
@@ -344,9 +532,12 @@ MixAssessment assessMix(const MixAssessmentInput& input, const GenreProfile& pro
 {
     MixAssessment result;
     const auto durationForAssessment = input.fullPassCompleted ? input.fullPassSeconds : input.analysisSeconds;
-    result.confidenceScore = scoreConfidence(input);
+    scoreDomainConfidences(result, input);
+    result.confidenceScore = combinedConfidenceScore(scoreConfidence(input), result);
     result.confidenceLabel = confidenceLabelFor(result.confidenceScore, input);
     result.confidenceText = confidenceTextFor(result.confidenceScore, input);
+    result.confidenceBreakdownText = confidenceBreakdownText(result);
+    result.confidenceCompactText = confidenceCompactText(result);
     result.analysisScope = input.fullPassCompleted ? "Full pass"
                          : input.fullPassActive ? "Recording"
                          : durationForAssessment >= 30.0f ? "Section"
@@ -654,6 +845,14 @@ MixAssessment assessMix(const MixAssessmentInput& input, const GenreProfile& pro
                            30.0f + static_cast<float>(75 - result.confidenceScore) * 0.25f,
                            "Run a full pass before final judgement; current confidence is "
                                + result.confidenceLabel + " " + juce::String(result.confidenceScore) + "/100.");
+
+    const auto weakestDomain = weakestConfidenceDomain(result);
+    if (result.measurementReady && ! input.fullPassCompleted && ! input.fullPassActive && weakestDomain.score < 60)
+        addActionCandidate(actionCandidates, actionCandidateCount, actionOrder,
+                           28.0f + static_cast<float>(60 - weakestDomain.score) * 0.25f,
+                           "Reliability is weakest for " + juce::String(weakestDomain.name) + " ("
+                               + juce::String(weakestDomain.score)
+                               + "/100); play a longer representative section before trusting that judgement.");
 
     if (actionCandidateCount == 0)
         addAction(result, "Metrics sit inside the selected profile; keep moves subtle and compare against references.");

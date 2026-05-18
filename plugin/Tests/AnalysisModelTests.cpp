@@ -106,10 +106,36 @@ void healthyFullPassIsReady()
     expect(result.verdictTitle == "Full pass OK", "healthy full pass should get the final-pass verdict");
     expect(result.overallScore >= 85, "healthy full pass should score in a professional-ready range");
     expect(result.confidenceScore >= 90, "healthy full pass should have high confidence");
+    expect(result.loudnessConfidenceScore >= 90, "healthy full pass should have high loudness confidence");
+    expect(result.dynamicsConfidenceScore >= 90, "healthy full pass should have high dynamics confidence");
+    expect(result.stereoConfidenceScore >= 90, "healthy full pass should have high stereo confidence");
+    expect(result.toneConfidenceScore >= 90, "healthy full pass should have high tone confidence");
+    expect(result.deliveryConfidenceScore >= 90, "healthy full pass should have high delivery confidence");
+    expectContains(result.confidenceBreakdownText, "Delivery", "confidence breakdown should name domain scores");
     expect(result.truePeakOk, "healthy full pass should pass true-peak target");
     expect(result.clippingOk, "healthy full pass should pass clipping target");
     expect(result.lowEndPhaseOk, "healthy full pass should pass low-end phase target");
     expectContains(result.priorityActions[0], "inside the selected profile", "healthy pass should not invent repair advice");
+}
+
+void domainConfidenceTracksMissingToneEvidence()
+{
+    auto input = makeHealthyStreamingInput();
+    input.analysisSeconds = 12.0f;
+    input.fullPassSeconds = 0.0f;
+    input.fullPassCompleted = false;
+    input.spectralCentroidHz = 0.0f;
+    input.spectralRolloffHz = 0.0f;
+    input.resonanceFreqHz = 0.0f;
+    input.resonanceGainDb = 0.0f;
+
+    const auto result = fmma::assessMix(input, profileNamed("Streaming / General"));
+
+    expect(result.measurementReady, "short but valid input should be measurement-ready");
+    expect(result.confidenceScore < 75, "short section without spectral evidence should not get final confidence");
+    expect(result.toneConfidenceScore < result.loudnessConfidenceScore,
+           "tone confidence should drop when spectral evidence is missing");
+    expectContains(result.confidenceBreakdownText, "Tone", "confidence breakdown should expose the weak tone domain");
 }
 
 void clippingDominatesActions()
@@ -175,6 +201,7 @@ int main()
     genreProfilesAreStable();
     warmupBlocksFinalJudgement();
     healthyFullPassIsReady();
+    domainConfidenceTracksMissingToneEvidence();
     clippingDominatesActions();
     lowEndPhaseIsAReleaseBlocker();
     fullPassUsesWorstCaseHolds();

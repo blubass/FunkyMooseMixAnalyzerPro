@@ -57,10 +57,15 @@ void SummaryComponent::paint(juce::Graphics& g)
     g.drawText(data.statusLine, details.removeFromTop(20.0f), juce::Justification::centredLeft);
 
     auto chips = details.removeFromTop(22.0f);
-    Theme::drawMetric(g, chips.removeFromLeft(180.0f), "Confidence",
+    Theme::drawMetric(g, chips.removeFromLeft(166.0f), "Confidence",
                       data.confidenceLabel + " " + juce::String(data.confidenceScore));
-    Theme::drawMetric(g, chips.removeFromLeft(150.0f), "Time", formatDuration(data.durationSeconds));
-    Theme::drawMetric(g, chips.removeFromLeft(170.0f), "LUFS delta", juce::String(data.lufsDelta, 1));
-    Theme::drawMetric(g, chips.removeFromLeft(170.0f), "Low-end", juce::String(data.lowEndPercent, 1) + "%");
-    Theme::drawMetric(g, chips.removeFromLeft(170.0f), "Presence", juce::String(data.presencePercent, 1) + "%");
+    Theme::drawMetric(g, chips.removeFromLeft(124.0f), "Time", formatDuration(data.durationSeconds));
+    Theme::drawMetric(g, chips.removeFromLeft(138.0f), "LUFS d", juce::String(data.lufsDelta, 1));
+    Theme::drawMetric(g, chips.removeFromLeft(138.0f), "Low", juce::String(data.lowEndPercent, 1) + "%");
+    Theme::drawMetric(g, chips.removeFromLeft(138.0f), "Presence", juce::String(data.presencePercent, 1) + "%");
+
+    if (data.confidenceCompactText.isNotEmpty() && chips.getWidth() > 150.0f)
+        Theme::drawMetric(g, chips.removeFromLeft(juce::jmin(248.0f, chips.getWidth())),
+                          "Rel L/D/S/T/P",
+                          data.confidenceCompactText);
 }

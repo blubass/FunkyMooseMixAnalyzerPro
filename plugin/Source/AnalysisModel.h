@@ -136,12 +136,19 @@ struct MixAssessment
     int transientScore = 70;
     int toneScore = 70;
     int confidenceScore = 0;
+    int loudnessConfidenceScore = 0;
+    int dynamicsConfidenceScore = 0;
+    int stereoConfidenceScore = 0;
+    int toneConfidenceScore = 0;
+    int deliveryConfidenceScore = 0;
 
     juce::String verdictKey = "measurement-limited";
     juce::String verdictTitle = "Warming up";
     juce::String statusLine = "Play audio to build a reliable live reading.";
     juce::String confidenceLabel = "No signal";
     juce::String confidenceText = "Waiting for usable audio.";
+    juce::String confidenceBreakdownText = "Loudness 0, Dynamics 0, Stereo 0, Tone 0, Delivery 0";
+    juce::String confidenceCompactText = "0/0/0/0/0";
     juce::String analysisScope = "Live";
     juce::String lufsTargetText;
     juce::String lowEndTargetText;

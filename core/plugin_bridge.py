@@ -70,11 +70,21 @@ class PluginBridge:
         # analysisSeconds (float) -> 25
         # fullPassCompleted (int) -> 26
         # worstClippedPercent (float) -> 27
+        # confidence domains (5 ints) -> 28, 29, 30, 31, 32
 
         if len(args) < 27:
             return
 
         worst_clipping = args[27] if len(args) > 27 else args[9]
+        confidence_domains = None
+        if len(args) >= 33:
+            confidence_domains = {
+                "loudness": int(args[28]),
+                "dynamics": int(args[29]),
+                "stereo": int(args[30]),
+                "tone": int(args[31]),
+                "delivery": int(args[32]),
+            }
 
         with self.lock:
             self.metrics = {
@@ -107,7 +117,8 @@ class PluginBridge:
                     "score": args[21],
                     "verdictKey": args[22],
                     "verdictTitle": args[23],
-                    "confidence": args[24]
+                    "confidence": args[24],
+                    "confidenceDomains": confidence_domains
                 },
                 "state": {
                     "duration": args[25],

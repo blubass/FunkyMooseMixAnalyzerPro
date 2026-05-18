@@ -80,17 +80,40 @@ private:
     void analyseSpectrumFrame() noexcept;
     void analysePhaseFrame() noexcept;
     void resetMeterState();
+    void resetAutoMasterState() noexcept;
+    void applyAutoMaster(juce::AudioBuffer<float>& buffer, int channelCount, int numSamples) noexcept;
     void publishMetric(std::atomic<float>& target, float value, float smoothing = 0.25f) noexcept;
     void appendStoredAnalysisState(juce::ValueTree& state) const;
     void restoreStoredAnalysisState(const juce::ValueTree& state);
     static int lraBinFor(float lufs) noexcept;
     static float lraBinCenter(int bin) noexcept;
 
+    struct AutoMasterBiquad
+    {
+        void reset() noexcept;
+        void setIdentity() noexcept;
+        void setLowShelf(double sampleRate, float frequencyHz, float gainDb) noexcept;
+        void setHighShelf(double sampleRate, float frequencyHz, float gainDb) noexcept;
+        void setPeak(double sampleRate, float frequencyHz, float q, float gainDb) noexcept;
+        float process(float sample) noexcept;
+
+        float b0 = 1.0f;
+        float b1 = 0.0f;
+        float b2 = 0.0f;
+        float a1 = 0.0f;
+        float a2 = 0.0f;
+        float z1 = 0.0f;
+        float z2 = 0.0f;
+    };
+
     double currentSampleRate = 48000.0;
     std::array<juce::dsp::IIR::Filter<float>, fmma::bandCount> leftBandFilters;
     std::array<juce::dsp::IIR::Filter<float>, fmma::bandCount> rightBandFilters;
     std::array<juce::dsp::IIR::Filter<float>, 2> kWeightPreFilters;
     std::array<juce::dsp::IIR::Filter<float>, 2> kWeightHighPassFilters;
+    std::array<AutoMasterBiquad, 2> autoMasterLowShelfFilters;
+    std::array<AutoMasterBiquad, 2> autoMasterPresenceFilters;
+    std::array<AutoMasterBiquad, 2> autoMasterAirShelfFilters;
 
     std::vector<double> momentaryPowerRing;
     std::vector<double> shortTermPowerRing;
@@ -193,9 +216,24 @@ private:
     std::atomic<float> worstLowMidPercent {0.0f};
     std::atomic<float> phaseCorrelation {1.0f};
     std::atomic<float> analysisSeconds {0.0f};
+    std::atomic<float> autoMasterStrengthPct {0.0f};
+    std::atomic<float> autoMasterTargetLufs {-14.0f};
+    std::atomic<float> autoMasterCeilingDbTp {-1.0f};
+    std::atomic<float> autoMasterGainDb {0.0f};
+    std::atomic<float> autoMasterLowShelfDb {0.0f};
+    std::atomic<float> autoMasterPresenceDb {0.0f};
+    std::atomic<float> autoMasterAirShelfDb {0.0f};
+    std::atomic<float> autoMasterWidthPercent {100.0f};
+    std::atomic<float> autoMasterLimiterReductionDb {0.0f};
     std::array<std::atomic<float>, fmma::bandCount> bandPercents {};
     std::array<std::atomic<float>, fmma::bandCount> bandCorrelations {};
     std::array<std::atomic<float>, fmma::bandCount> bandSideRatiosDb {};
+
+    float smoothedAutoMasterGainDb = 0.0f;
+    float smoothedAutoMasterLowShelfDb = 0.0f;
+    float smoothedAutoMasterPresenceDb = 0.0f;
+    float smoothedAutoMasterAirShelfDb = 0.0f;
+    float smoothedAutoMasterSideGain = 1.0f;
 
     mutable juce::CriticalSection storedAnalysisLock;
     fmma::AnalyzerMetrics storedReferenceMetrics;

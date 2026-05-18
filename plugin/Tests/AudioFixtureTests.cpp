@@ -266,6 +266,57 @@ fmma::AnalyzerMetrics analyseFixture(const juce::AudioBuffer<float>& source, boo
     return processor->getMetrics();
 }
 
+void setParameterNormalised(FunkyMooseMixAnalyzerAudioProcessor& processor,
+                            const juce::String& parameterId,
+                            float normalisedValue)
+{
+    auto* parameter = processor.parameters.getParameter(parameterId);
+    expect(parameter != nullptr, parameterId + " parameter should exist");
+    if (parameter != nullptr)
+        parameter->setValueNotifyingHost(juce::jlimit(0.0f, 1.0f, normalisedValue));
+}
+
+juce::AudioBuffer<float> renderFixture(const juce::AudioBuffer<float>& source,
+                                       bool autoMasterEnabled,
+                                       float strengthNormalised = 1.0f)
+{
+    auto processor = makePreparedProcessor();
+    setParameterNormalised(*processor, "autoMasterEnabled", autoMasterEnabled ? 1.0f : 0.0f);
+    setParameterNormalised(*processor, "autoMasterStrength", strengthNormalised);
+
+    juce::AudioBuffer<float> rendered { 2, source.getNumSamples() };
+    juce::MidiBuffer midi;
+    auto offset = 0;
+
+    while (offset < source.getNumSamples())
+    {
+        const auto samplesThisBlock = juce::jmin(testBlockSize, source.getNumSamples() - offset);
+        juce::AudioBuffer<float> block { 2, samplesThisBlock };
+        for (auto channel = 0; channel < 2; ++channel)
+            block.copyFrom(channel, 0, source, juce::jmin(channel, source.getNumChannels() - 1), offset, samplesThisBlock);
+
+        processor->processBlock(block, midi);
+        for (auto channel = 0; channel < 2; ++channel)
+            rendered.copyFrom(channel, offset, block, channel, 0, samplesThisBlock);
+        offset += samplesThisBlock;
+    }
+
+    return rendered;
+}
+
+float bufferPeak(const juce::AudioBuffer<float>& buffer, int startSample = 0) noexcept
+{
+    auto peak = 0.0f;
+    const auto safeStart = juce::jlimit(0, buffer.getNumSamples(), startSample);
+    for (auto channel = 0; channel < buffer.getNumChannels(); ++channel)
+    {
+        const auto* samples = buffer.getReadPointer(channel);
+        for (auto sample = safeStart; sample < buffer.getNumSamples(); ++sample)
+            peak = juce::jmax(peak, std::abs(samples[sample]));
+    }
+    return peak;
+}
+
 fmma::AnalyzerMetrics analyseWavRoundTrip(const juce::AudioBuffer<float>& source,
                                           const juce::String& name,
                                           bool asFullPass = false)
@@ -404,6 +455,8 @@ void spectralFixtureFindsExpectedBand()
 void storedAnalysisStateRoundTrips()
 {
     auto source = makePreparedProcessor();
+    setParameterNormalised(*source, "autoMasterEnabled", 1.0f);
+    setParameterNormalised(*source, "autoMasterStrength", 0.8f);
 
     const auto reference = makeStoredMetrics(1.0f);
     const auto snapshotA = makeStoredMetrics(2.0f);
@@ -419,6 +472,12 @@ void storedAnalysisStateRoundTrips()
 
     auto restored = makePreparedProcessor();
     restored->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    expect(restored->parameters.getRawParameterValue("autoMasterEnabled")->load() > 0.5f,
+           "auto-master enabled parameter should restore from state");
+    expectNear(restored->parameters.getRawParameterValue("autoMasterStrength")->load(),
+               80.0f,
+               0.1f,
+               "auto-master strength parameter should restore from state");
 
     fmma::AnalyzerMetrics restoredReference;
     fmma::AnalyzerMetrics restoredSnapshotA;
@@ -491,6 +550,48 @@ void phaseCorrelationFixtureTestsPhase()
     expectNear(metrics.phaseCorrelation, -1.0f, 0.1f, "Out-of-phase signals should have negative phase correlation");
 }
 
+void autoMasterBypassesWhenDisabled()
+{
+    const auto source = makeStereoSine(1.0f, 440.0f, juce::Decibels::decibelsToGain(-12.0f));
+    const auto rendered = renderFixture(source, false);
+
+    auto maxDelta = 0.0f;
+    for (auto channel = 0; channel < rendered.getNumChannels(); ++channel)
+    {
+        for (auto sample = 0; sample < rendered.getNumSamples(); ++sample)
+        {
+            maxDelta = juce::jmax(maxDelta,
+                                  std::abs(rendered.getSample(channel, sample)
+                                           - source.getSample(channel, sample)));
+        }
+    }
+
+    expect(maxDelta < 1.0e-6f, "auto-master disabled should preserve the audio stream");
+}
+
+void autoMasterRaisesQuietProgramMaterial()
+{
+    const auto source = makeStereoSine(30.0f, 1000.0f, juce::Decibels::decibelsToGain(-26.0f));
+    const auto rendered = renderFixture(source, true);
+    const auto tailStart = static_cast<int>(24.0 * testSampleRate);
+    const auto inputTailPeak = bufferPeak(source, tailStart);
+    const auto outputTailPeak = bufferPeak(rendered, tailStart);
+
+    expect(outputTailPeak > inputTailPeak * 1.35f,
+           "auto-master should raise quiet material after enough evidence");
+}
+
+void autoMasterReducesHotProgramMaterial()
+{
+    const auto source = makeStereoSine(30.0f, 1000.0f, juce::Decibels::decibelsToGain(-0.3f));
+    const auto rendered = renderFixture(source, true);
+    const auto tailStart = static_cast<int>(24.0 * testSampleRate);
+    const auto outputTailPeakDb = 20.0f * std::log10(juce::jmax(bufferPeak(rendered, tailStart), 1.0e-6f));
+
+    expect(outputTailPeakDb < -3.0f,
+           "auto-master should reduce very hot material instead of driving the limiter");
+}
+
 void runFixtureTest(const char* name, void (*test)())
 {
     std::cerr << "RUN " << name << std::endl;
@@ -510,6 +611,9 @@ int main()
     runFixtureTest("spectralFixtureFindsExpectedBand", spectralFixtureFindsExpectedBand);
     runFixtureTest("storedAnalysisStateRoundTrips", storedAnalysisStateRoundTrips);
     runFixtureTest("phaseCorrelationFixtureTestsPhase", phaseCorrelationFixtureTestsPhase);
+    runFixtureTest("autoMasterBypassesWhenDisabled", autoMasterBypassesWhenDisabled);
+    runFixtureTest("autoMasterRaisesQuietProgramMaterial", autoMasterRaisesQuietProgramMaterial);
+    runFixtureTest("autoMasterReducesHotProgramMaterial", autoMasterReducesHotProgramMaterial);
     if (failures == 0)
     {
         std::cout << "AudioFixtureTests OK\n";

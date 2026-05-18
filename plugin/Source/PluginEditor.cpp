@@ -69,6 +69,20 @@ FunkyMooseMixAnalyzerAudioProcessorEditor::FunkyMooseMixAnalyzerAudioProcessorEd
     instrumentalToggle.setColour(juce::ToggleButton::textColourId, muted);
     addAndMakeVisible(instrumentalToggle);
 
+    autoMasterToggle.setButtonText("Auto Master");
+    autoMasterToggle.setColour(juce::ToggleButton::textColourId, muted);
+    autoMasterToggle.setTooltip("Enable conservative automatic mastering output processing.");
+    addAndMakeVisible(autoMasterToggle);
+
+    autoMasterStrengthSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    autoMasterStrengthSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 42, 20);
+    autoMasterStrengthSlider.setColour(juce::Slider::textBoxTextColourId, text);
+    autoMasterStrengthSlider.setColour(juce::Slider::textBoxBackgroundColourId, panel);
+    autoMasterStrengthSlider.setColour(juce::Slider::textBoxOutlineColourId, border);
+    autoMasterStrengthSlider.setColour(juce::Slider::trackColourId, teal);
+    autoMasterStrengthSlider.setTooltip("Auto Master strength.");
+    addAndMakeVisible(autoMasterStrengthSlider);
+
     passButton.setButtonText("Start Pass");
     passButton.onClick = [this]
     {
@@ -177,6 +191,8 @@ FunkyMooseMixAnalyzerAudioProcessorEditor::FunkyMooseMixAnalyzerAudioProcessorEd
 
     genreAttachment = std::make_unique<ComboAttachment>(audioProcessor.parameters, "genre", genreBox);
     instrumentalAttachment = std::make_unique<ButtonAttachment>(audioProcessor.parameters, "instrumental", instrumentalToggle);
+    autoMasterAttachment = std::make_unique<ButtonAttachment>(audioProcessor.parameters, "autoMasterEnabled", autoMasterToggle);
+    autoMasterStrengthAttachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "autoMasterStrength", autoMasterStrengthSlider);
     addAndMakeVisible(summaryComponent);
     addAndMakeVisible(loudnessCard);
     addAndMakeVisible(dynamicsCard);
@@ -189,7 +205,7 @@ FunkyMooseMixAnalyzerAudioProcessorEditor::FunkyMooseMixAnalyzerAudioProcessorEd
     addAndMakeVisible(referenceComponent);
     addAndMakeVisible(snapshotComponent);
 
-    setSize(1440, 940);
+    setSize(1640, 940);
     startTimerHz(6);
 }
 
@@ -301,6 +317,15 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
     MetricsCardComponent::Data qualityData;
     qualityData.title = "Safety / Delivery";
     qualityData.metrics = {
+        {"Auto Master", metrics.autoMasterEnabled ? "On " + juce::String(metrics.autoMasterStrength, 0) + "%" : "Off"},
+        {"AM Target", metrics.autoMasterEnabled ? juce::String(metrics.autoMasterTargetLufs, 0) + " LUFS / "
+                                                  + juce::String(metrics.autoMasterCeilingDbTp, 1) + " dBTP"
+                                                : "N/A"},
+        {"AM Gain", metrics.autoMasterEnabled ? formatSigned(metrics.autoMasterGainDb, " dB") : "N/A"},
+        {"AM Tone", metrics.autoMasterEnabled ? "L " + formatSigned(metrics.autoMasterLowShelfDb, " dB", 1)
+                                                + " / P " + formatSigned(metrics.autoMasterPresenceDb, " dB", 1)
+                                                + " / A " + formatSigned(metrics.autoMasterAirShelfDb, " dB", 1)
+                                              : "N/A"},
         {"Clipping", juce::String(metrics.clippedPercent, 3) + "%"},
         {"Worst Clip", juce::String(metrics.worstClippedPercent, 3) + "%"},
         {"TP Margin", hasTruePeak ? formatSigned(truePeakMargin, " dB") : "N/A"},
@@ -309,7 +334,7 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
         {"Apple -16", formatDeliveryPreview(-16.0f)},
         {"Broadcast", formatDeliveryPreview(-23.0f)}
     };
-    qualityData.rowHeight = 14.5f;
+    qualityData.rowHeight = 12.8f;
     qualityData.barValue = hasTruePeak ? juce::jlimit(0.0f, 1.0f, (truePeakMargin + 1.0f) / 5.0f) : 0.0f;
     qualityData.barColour = hasTruePeak ? (truePeakMargin < 0.0f ? Theme::danger : truePeakMargin < 1.0f ? Theme::amber : Theme::success) : Theme::muted;
     qualityCard.update(qualityData);
@@ -485,6 +510,16 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::smoothDisplayMetrics(const fmma:
     metrics.analysisFrozen = raw.analysisFrozen;
     metrics.hostTransportPlaying = raw.hostTransportPlaying;
     metrics.hostAutoPassActive = raw.hostAutoPassActive;
+    metrics.autoMasterEnabled = raw.autoMasterEnabled;
+    metrics.autoMasterStrength = raw.autoMasterStrength;
+    metrics.autoMasterTargetLufs = raw.autoMasterTargetLufs;
+    metrics.autoMasterCeilingDbTp = raw.autoMasterCeilingDbTp;
+    metrics.autoMasterGainDb = smoothValue(metrics.autoMasterGainDb, raw.autoMasterGainDb, amount);
+    metrics.autoMasterLowShelfDb = smoothValue(metrics.autoMasterLowShelfDb, raw.autoMasterLowShelfDb, amount);
+    metrics.autoMasterPresenceDb = smoothValue(metrics.autoMasterPresenceDb, raw.autoMasterPresenceDb, amount);
+    metrics.autoMasterAirShelfDb = smoothValue(metrics.autoMasterAirShelfDb, raw.autoMasterAirShelfDb, amount);
+    metrics.autoMasterWidthPercent = smoothValue(metrics.autoMasterWidthPercent, raw.autoMasterWidthPercent, amount);
+    metrics.autoMasterLimiterReductionDb = smoothValue(metrics.autoMasterLimiterReductionDb, raw.autoMasterLimiterReductionDb, amount);
 
     for (size_t i = 0; i < fmma::bandCount; ++i)
     {
@@ -735,11 +770,15 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::resized()
 {
     auto bounds = getLocalBounds().reduced(24);
     auto header = bounds.removeFromTop(34);
-    auto controls = header.removeFromRight(1080);
+    auto controls = header.removeFromRight(1280);
     genreLabel.setBounds(controls.removeFromLeft(80));
     genreBox.setBounds(controls.removeFromLeft(170).reduced(0, 1));
     controls.removeFromLeft(7);
     instrumentalToggle.setBounds(controls.removeFromLeft(96));
+    controls.removeFromLeft(7);
+    autoMasterToggle.setBounds(controls.removeFromLeft(102));
+    controls.removeFromLeft(7);
+    autoMasterStrengthSlider.setBounds(controls.removeFromLeft(112).reduced(0, 1));
     controls.removeFromLeft(7);
     passButton.setBounds(controls.removeFromLeft(88).reduced(0, 1));
     controls.removeFromLeft(7);
@@ -843,6 +882,19 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
         report << "Release Blockers:\n";
         for (auto i = 0; i < sourceAssessment.releaseBlockerCount; ++i)
             report << "- " << sourceAssessment.releaseBlockers[static_cast<size_t>(i)] << "\n";
+    }
+    report << "Auto Master: " << (sourceMetrics.autoMasterEnabled ? "enabled" : "off") << "\n";
+    if (sourceMetrics.autoMasterEnabled)
+    {
+        report << "Auto Master Target: " << juce::String(sourceMetrics.autoMasterTargetLufs, 1)
+               << " LUFS / " << juce::String(sourceMetrics.autoMasterCeilingDbTp, 1) << " dBTP ceiling\n";
+        report << "Auto Master Strength: " << juce::String(sourceMetrics.autoMasterStrength, 0) << "%\n";
+        report << "Auto Master Moves: gain " << formatSigned(sourceMetrics.autoMasterGainDb, " dB")
+               << ", low shelf " << formatSigned(sourceMetrics.autoMasterLowShelfDb, " dB")
+               << ", presence " << formatSigned(sourceMetrics.autoMasterPresenceDb, " dB")
+               << ", air " << formatSigned(sourceMetrics.autoMasterAirShelfDb, " dB")
+               << ", width " << juce::String(sourceMetrics.autoMasterWidthPercent, 0) << "%\n";
+        report << "Auto Master Limiter GR: " << juce::String(sourceMetrics.autoMasterLimiterReductionDb, 1) << " dB\n";
     }
     report << "Verdict: " << sourceAssessment.verdictTitle << "\n";
     report << "Mix Score: " << sourceAssessment.overallScore << "/100\n";
@@ -1103,6 +1155,19 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
         actions.add(referenceActionNote(sourceMetrics, sourceAssessment));
     setJsonProperty(assessmentJson, "priorityActions", actions);
     setJsonProperty(root, "assessment", assessmentJson);
+
+    auto autoMasterJson = juce::var { new juce::DynamicObject() };
+    setJsonProperty(autoMasterJson, "enabled", sourceMetrics.autoMasterEnabled);
+    setJsonProperty(autoMasterJson, "strengthPercent", jsonNumber(sourceMetrics.autoMasterStrength));
+    setJsonProperty(autoMasterJson, "targetLufs", jsonNumber(sourceMetrics.autoMasterTargetLufs));
+    setJsonProperty(autoMasterJson, "ceilingDbTp", jsonNumber(sourceMetrics.autoMasterCeilingDbTp));
+    setJsonProperty(autoMasterJson, "gainDb", jsonNumber(sourceMetrics.autoMasterGainDb));
+    setJsonProperty(autoMasterJson, "lowShelfDb", jsonNumber(sourceMetrics.autoMasterLowShelfDb));
+    setJsonProperty(autoMasterJson, "presenceDb", jsonNumber(sourceMetrics.autoMasterPresenceDb));
+    setJsonProperty(autoMasterJson, "airShelfDb", jsonNumber(sourceMetrics.autoMasterAirShelfDb));
+    setJsonProperty(autoMasterJson, "widthPercent", jsonNumber(sourceMetrics.autoMasterWidthPercent));
+    setJsonProperty(autoMasterJson, "limiterReductionDb", jsonNumber(sourceMetrics.autoMasterLimiterReductionDb));
+    setJsonProperty(root, "autoMaster", autoMasterJson);
 
     auto measurements = juce::var { new juce::DynamicObject() };
     setJsonProperty(measurements, "momentaryLufs", jsonAudioNumber(sourceMetrics.momentaryLufs));

@@ -72,6 +72,7 @@ class PluginBridge:
         # worstClippedPercent (float) -> 27
         # confidence domains (5 ints) -> 28, 29, 30, 31, 32
         # release gate score / ready -> 33, 34
+        # auto master enabled, strength, target, ceiling, gain, low, presence, air, width, limiter GR -> 35..44
 
         if len(args) < 27:
             return
@@ -91,6 +92,20 @@ class PluginBridge:
             release_gate = {
                 "score": int(args[33]),
                 "ready": bool(args[34]),
+            }
+        auto_master = None
+        if len(args) >= 45:
+            auto_master = {
+                "enabled": bool(args[35]),
+                "strengthPercent": float(args[36]),
+                "targetLufs": float(args[37]),
+                "ceilingDbTp": float(args[38]),
+                "gainDb": float(args[39]),
+                "lowShelfDb": float(args[40]),
+                "presenceDb": float(args[41]),
+                "airShelfDb": float(args[42]),
+                "widthPercent": float(args[43]),
+                "limiterReductionDb": float(args[44]),
             }
 
         with self.lock:
@@ -131,7 +146,8 @@ class PluginBridge:
                 "state": {
                     "duration": args[25],
                     "completed": bool(args[26])
-                }
+                },
+                "autoMaster": auto_master
             }
             self.last_update = time.time()
 

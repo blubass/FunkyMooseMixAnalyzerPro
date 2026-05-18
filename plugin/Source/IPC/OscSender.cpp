@@ -72,6 +72,16 @@ void OscSender::send(const fmma::AnalyzerMetrics& m,
     msg.addInt32(a.deliveryConfidenceScore);
     msg.addInt32(a.releaseGateScore);
     msg.addInt32(a.releaseReady ? 1 : 0);
+    msg.addInt32(m.autoMasterEnabled ? 1 : 0);
+    msg.addFloat32(m.autoMasterStrength);
+    msg.addFloat32(m.autoMasterTargetLufs);
+    msg.addFloat32(m.autoMasterCeilingDbTp);
+    msg.addFloat32(m.autoMasterGainDb);
+    msg.addFloat32(m.autoMasterLowShelfDb);
+    msg.addFloat32(m.autoMasterPresenceDb);
+    msg.addFloat32(m.autoMasterAirShelfDb);
+    msg.addFloat32(m.autoMasterWidthPercent);
+    msg.addFloat32(m.autoMasterLimiterReductionDb);
 
     sender.send(msg);
 }

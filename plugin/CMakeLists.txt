@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.22)
 #   cmake -S plugin -B /tmp/fmma_build -DMIX_ANALYZER_JUCE_DIR=<path>
 # or set CMAKE_BINARY_DIR to a safe path before running cmake.
 
-project(FunkyMooseMixAnalyzerPlugin VERSION 0.1.0 LANGUAGES C CXX)
+project(FunkyMooseMixAnalyzerPlugin VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

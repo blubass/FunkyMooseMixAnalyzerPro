@@ -105,6 +105,7 @@ class AppSmokeTest(unittest.TestCase):
             180.0, 1, 0.4,
             94, 91, 88, 85, 97,
             92, 1,
+            1, 65.0, -14.0, -1.0, 2.5, -0.4, -0.8, 0.2, 92.0, 0.6,
         ]
 
         bridge._handle_metrics("/fmma/metrics", *args)
@@ -115,6 +116,9 @@ class AppSmokeTest(unittest.TestCase):
         self.assertEqual(metrics["assessment"]["confidenceDomains"]["tone"], 85)
         self.assertEqual(metrics["assessment"]["releaseGate"]["score"], 92)
         self.assertTrue(metrics["assessment"]["releaseGate"]["ready"])
+        self.assertTrue(metrics["autoMaster"]["enabled"])
+        self.assertEqual(metrics["autoMaster"]["gainDb"], 2.5)
+        self.assertEqual(metrics["autoMaster"]["widthPercent"], 92.0)
 
     def test_plugin_bridge_defaults_worst_clipping_for_older_messages(self):
         bridge = PluginBridge()
@@ -133,6 +137,7 @@ class AppSmokeTest(unittest.TestCase):
         self.assertEqual(metrics["safety"]["worstClipping"], 0.03)
         self.assertIsNone(metrics["assessment"]["confidenceDomains"])
         self.assertIsNone(metrics["assessment"]["releaseGate"])
+        self.assertIsNone(metrics["autoMaster"])
 
     def test_summary_uses_profile_ranges_and_confidence(self):
         slices = [{

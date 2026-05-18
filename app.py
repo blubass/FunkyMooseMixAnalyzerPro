@@ -321,6 +321,7 @@ def plugin_report_to_analysis(report, req_id):
     confidence_score = int(max(0, min(100, finite_number(scores.get("confidence"), confidence_payload.get("score", 0)) or 0)))
     release_gate_payload = assessment.get("releaseGate") if isinstance(assessment.get("releaseGate"), dict) else {}
     release_gate_blockers = release_gate_payload.get("blockers") if isinstance(release_gate_payload.get("blockers"), list) else []
+    auto_master_payload = report.get("autoMaster") if isinstance(report.get("autoMaster"), dict) else {}
     measured_lufs = slice_data["I"]
     target_lufs = profile["target_lufs"]
     lufs_delta = round(measured_lufs - target_lufs, 1) if measured_lufs is not None and target_lufs is not None else None
@@ -357,6 +358,18 @@ def plugin_report_to_analysis(report, req_id):
             "title": str(release_gate_payload.get("title") or "Imported plugin release gate"),
             "text": str(release_gate_payload.get("text") or ""),
             "blockers": [str(item) for item in release_gate_blockers],
+        },
+        "auto_master": {
+            "enabled": bool(auto_master_payload.get("enabled", False)),
+            "strength_percent": rounded_number(auto_master_payload.get("strengthPercent"), 1),
+            "target_lufs": rounded_number(auto_master_payload.get("targetLufs"), 2),
+            "ceiling_dbtp": rounded_number(auto_master_payload.get("ceilingDbTp"), 2),
+            "gain_db": rounded_number(auto_master_payload.get("gainDb"), 2),
+            "low_shelf_db": rounded_number(auto_master_payload.get("lowShelfDb"), 2),
+            "presence_db": rounded_number(auto_master_payload.get("presenceDb"), 2),
+            "air_shelf_db": rounded_number(auto_master_payload.get("airShelfDb"), 2),
+            "width_percent": rounded_number(auto_master_payload.get("widthPercent"), 1),
+            "limiter_reduction_db": rounded_number(auto_master_payload.get("limiterReductionDb"), 2),
         },
         "aggregate": aggregate,
         "verdict": verdict,
@@ -401,6 +414,7 @@ def plugin_report_to_analysis(report, req_id):
             "analysisScope": report.get("analysisScope"),
             "plainTextReport": report.get("plainTextReport"),
             "deliveryPreview": report.get("deliveryPreview"),
+            "autoMaster": auto_master_payload,
             "worstCase": worst_case,
             "reference": report.get("reference"),
             "snapshots": report.get("snapshots"),

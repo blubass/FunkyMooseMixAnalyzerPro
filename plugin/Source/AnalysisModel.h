@@ -117,6 +117,16 @@ struct AnalyzerMetrics
     bool analysisFrozen = false;
     bool hostTransportPlaying = false;
     bool hostAutoPassActive = false;
+    bool autoMasterEnabled = false;
+    float autoMasterStrength = 0.0f;
+    float autoMasterTargetLufs = -14.0f;
+    float autoMasterCeilingDbTp = -1.0f;
+    float autoMasterGainDb = 0.0f;
+    float autoMasterLowShelfDb = 0.0f;
+    float autoMasterPresenceDb = 0.0f;
+    float autoMasterAirShelfDb = 0.0f;
+    float autoMasterWidthPercent = 100.0f;
+    float autoMasterLimiterReductionDb = 0.0f;
     std::array<float, bandCount> bandPercents {};
     std::array<float, bandCount> bandCorrelations { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
     std::array<float, bandCount> bandSideRatiosDb { -120.0f, -120.0f, -120.0f, -120.0f, -120.0f, -120.0f };

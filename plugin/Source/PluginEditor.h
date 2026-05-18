@@ -22,6 +22,7 @@ public:
 private:
     using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
+    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
 
     void timerCallback() override;
     void copyReportToClipboard();
@@ -76,6 +77,8 @@ private:
     juce::Label genreLabel;
     juce::ComboBox genreBox;
     juce::ToggleButton instrumentalToggle;
+    juce::ToggleButton autoMasterToggle;
+    juce::Slider autoMasterStrengthSlider;
     juce::TextButton passButton;
     juce::TextButton referenceButton;
     juce::TextButton clearReferenceButton;
@@ -87,6 +90,8 @@ private:
     juce::TextButton copyJsonButton;
     std::unique_ptr<ComboAttachment> genreAttachment;
     std::unique_ptr<ButtonAttachment> instrumentalAttachment;
+    std::unique_ptr<ButtonAttachment> autoMasterAttachment;
+    std::unique_ptr<SliderAttachment> autoMasterStrengthAttachment;
 
     SummaryComponent summaryComponent;
     MetricsCardComponent loudnessCard;

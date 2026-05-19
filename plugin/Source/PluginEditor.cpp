@@ -331,8 +331,11 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
         {"AM Dyn", metrics.autoMasterEnabled ? "Glue " + juce::String(metrics.autoMasterGlueReductionDb, 1)
                                                + " / Lim " + juce::String(metrics.autoMasterLimiterReductionDb, 1) + " dB"
                                              : "N/A"},
-        {"Clipping", juce::String(metrics.clippedPercent, 3) + "%"},
-        {"Worst Clip", juce::String(metrics.worstClippedPercent, 3) + "%"},
+        {"AM Score/LU/TP", metrics.autoMasterEnabled ? juce::String(metrics.autoMasterReleaseScore, 0) + " / "
+                                                       + formatSigned(metrics.autoMasterLufsDeltaDb, "", 1)
+                                                       + " / " + formatSigned(metrics.autoMasterTruePeakMarginDb, "", 1)
+                                                     : "N/A"},
+        {"Clip/Worst", juce::String(metrics.clippedPercent, 3) + " / " + juce::String(metrics.worstClippedPercent, 3) + "%"},
         {"TP Margin", hasTruePeak ? formatSigned(truePeakMargin, " dB") : "N/A"},
         {"Worst TP", formatDbTp(metrics.worstTruePeakDb)},
         {"Stream -14", formatDeliveryPreview(-14.0f)},
@@ -533,6 +536,9 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::smoothDisplayMetrics(const fmma:
     metrics.autoMasterProjectedLufs = smoothAudioDbValue(metrics.autoMasterProjectedLufs, raw.autoMasterProjectedLufs);
     metrics.autoMasterProjectedTruePeakDbTp = smoothAudioDbValue(metrics.autoMasterProjectedTruePeakDbTp, raw.autoMasterProjectedTruePeakDbTp);
     metrics.autoMasterLoudnessMatchGainDb = smoothValue(metrics.autoMasterLoudnessMatchGainDb, raw.autoMasterLoudnessMatchGainDb, amount);
+    metrics.autoMasterLufsDeltaDb = smoothValue(metrics.autoMasterLufsDeltaDb, raw.autoMasterLufsDeltaDb, amount);
+    metrics.autoMasterTruePeakMarginDb = smoothValue(metrics.autoMasterTruePeakMarginDb, raw.autoMasterTruePeakMarginDb, amount);
+    metrics.autoMasterReleaseScore = smoothValue(metrics.autoMasterReleaseScore, raw.autoMasterReleaseScore, amount);
 
     for (size_t i = 0; i < fmma::bandCount; ++i)
     {
@@ -917,6 +923,9 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
                        : "N/A")
                << "\n";
         report << "Auto Master Loudness-Match Gain: " << formatSigned(sourceMetrics.autoMasterLoudnessMatchGainDb, " dB") << "\n";
+        report << "Auto Master Target Delta: " << formatSigned(sourceMetrics.autoMasterLufsDeltaDb, " dB") << "\n";
+        report << "Auto Master True Peak Margin: " << formatSigned(sourceMetrics.autoMasterTruePeakMarginDb, " dB") << "\n";
+        report << "Auto Master Release Score: " << juce::String(sourceMetrics.autoMasterReleaseScore, 0) << "/100\n";
     }
     report << "Verdict: " << sourceAssessment.verdictTitle << "\n";
     report << "Mix Score: " << sourceAssessment.overallScore << "/100\n";
@@ -1193,6 +1202,9 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     setJsonProperty(autoMasterJson, "projectedLufs", jsonAudioNumber(sourceMetrics.autoMasterProjectedLufs));
     setJsonProperty(autoMasterJson, "projectedTruePeakDbTp", jsonAudioNumber(sourceMetrics.autoMasterProjectedTruePeakDbTp));
     setJsonProperty(autoMasterJson, "loudnessMatchGainDb", jsonNumber(sourceMetrics.autoMasterLoudnessMatchGainDb));
+    setJsonProperty(autoMasterJson, "lufsDeltaDb", jsonNumber(sourceMetrics.autoMasterLufsDeltaDb));
+    setJsonProperty(autoMasterJson, "truePeakMarginDb", jsonNumber(sourceMetrics.autoMasterTruePeakMarginDb));
+    setJsonProperty(autoMasterJson, "releaseScore", jsonNumber(sourceMetrics.autoMasterReleaseScore));
     setJsonProperty(root, "autoMaster", autoMasterJson);
 
     auto measurements = juce::var { new juce::DynamicObject() };

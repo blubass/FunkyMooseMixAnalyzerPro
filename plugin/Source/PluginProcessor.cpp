@@ -722,6 +722,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::resetAutoMasterState() noexcept
     autoMasterProjectedLufs.store(-120.0f, std::memory_order_relaxed);
     autoMasterProjectedTruePeakDbTp.store(-120.0f, std::memory_order_relaxed);
     autoMasterLoudnessMatchGainDb.store(0.0f, std::memory_order_relaxed);
+    autoMasterLufsDeltaDb.store(0.0f, std::memory_order_relaxed);
+    autoMasterTruePeakMarginDb.store(0.0f, std::memory_order_relaxed);
+    autoMasterReleaseScore.store(0.0f, std::memory_order_relaxed);
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<float>& buffer,
@@ -1024,17 +1027,40 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
     const auto projectedLufs = hasLoudness
         ? juce::jlimit(-120.0f, 24.0f, metrics.integratedLufs + smoothedAutoMasterGainDb)
         : -120.0f;
-    const auto projectedTruePeak = hasTruePeak
-        ? juce::jmin(autoMasterDefaultCeilingDbTp,
-                     truePeakForSafety
-                        + smoothedAutoMasterGainDb
-                        - displayedAutoMasterGlueReductionDb
-                        - displayedAutoMasterLimiterReductionDb)
+    const auto rawProjectedTruePeak = hasTruePeak
+        ? truePeakForSafety
+            + smoothedAutoMasterGainDb
+            - displayedAutoMasterGlueReductionDb
+            - displayedAutoMasterLimiterReductionDb
         : -120.0f;
+    const auto projectedTruePeak = hasTruePeak
+        ? juce::jmin(autoMasterDefaultCeilingDbTp, rawProjectedTruePeak)
+        : -120.0f;
+    const auto projectedLufsDelta = hasLoudness ? projectedLufs - profile.targetLufs : 0.0f;
+    const auto projectedTruePeakMargin = hasTruePeak ? autoMasterDefaultCeilingDbTp - rawProjectedTruePeak : 0.0f;
+    auto releaseScore = 0.0f;
+    if (hasLoudness && hasTruePeak)
+    {
+        const auto reductionLoadDb = displayedAutoMasterGlueReductionDb + displayedAutoMasterLimiterReductionDb;
+        releaseScore = 100.0f;
+        releaseScore -= juce::jlimit(0.0f, 36.0f, std::abs(projectedLufsDelta) * 9.0f);
+        releaseScore -= juce::jlimit(0.0f, 22.0f, displayedAutoMasterLimiterReductionDb * 7.0f);
+        releaseScore -= juce::jlimit(0.0f, 12.0f, displayedAutoMasterGlueReductionDb * 2.5f);
+        releaseScore -= juce::jlimit(0.0f, 14.0f, juce::jmax(0.0f, std::abs(smoothedAutoMasterGainDb) - 5.5f) * 3.5f);
+        releaseScore -= juce::jlimit(0.0f, 18.0f, juce::jmax(0.0f, reductionLoadDb - 4.0f) * 4.5f);
+        releaseScore -= projectedTruePeakMargin < 0.0f
+            ? juce::jlimit(0.0f, 28.0f, -projectedTruePeakMargin * 12.0f)
+            : 0.0f;
+        releaseScore = juce::jlimit(0.0f, 100.0f, releaseScore * (0.65f + (0.35f * trust)));
+    }
+
     autoMasterProjectedLufs.store(projectedLufs, std::memory_order_relaxed);
     autoMasterProjectedTruePeakDbTp.store(projectedTruePeak, std::memory_order_relaxed);
     autoMasterLoudnessMatchGainDb.store(hasLoudness ? -smoothedAutoMasterGainDb : 0.0f,
                                         std::memory_order_relaxed);
+    autoMasterLufsDeltaDb.store(projectedLufsDelta, std::memory_order_relaxed);
+    autoMasterTruePeakMarginDb.store(projectedTruePeakMargin, std::memory_order_relaxed);
+    autoMasterReleaseScore.store(releaseScore, std::memory_order_relaxed);
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::timerCallback()
@@ -1834,6 +1860,9 @@ fmma::AnalyzerMetrics FunkyMooseMixAnalyzerAudioProcessor::getMetrics() const
     metrics.autoMasterProjectedLufs = autoMasterProjectedLufs.load(std::memory_order_relaxed);
     metrics.autoMasterProjectedTruePeakDbTp = autoMasterProjectedTruePeakDbTp.load(std::memory_order_relaxed);
     metrics.autoMasterLoudnessMatchGainDb = autoMasterLoudnessMatchGainDb.load(std::memory_order_relaxed);
+    metrics.autoMasterLufsDeltaDb = autoMasterLufsDeltaDb.load(std::memory_order_relaxed);
+    metrics.autoMasterTruePeakMarginDb = autoMasterTruePeakMarginDb.load(std::memory_order_relaxed);
+    metrics.autoMasterReleaseScore = autoMasterReleaseScore.load(std::memory_order_relaxed);
 
     for (auto band = 0; band < fmma::bandCount; ++band)
     {

@@ -635,6 +635,14 @@ void autoMasterRaisesQuietProgramMaterial()
                -metrics.autoMasterGainDb,
                0.05f,
                "auto-master loudness-match gain should invert the applied loudness gain");
+    expectNear(metrics.autoMasterLufsDeltaDb,
+               metrics.autoMasterProjectedLufs - metrics.autoMasterTargetLufs,
+               0.05f,
+               "auto-master LUFS delta should describe projected target error");
+    expect(std::isfinite(metrics.autoMasterTruePeakMarginDb),
+           "auto-master true-peak margin should be finite when true-peak evidence exists");
+    expect(metrics.autoMasterReleaseScore > 50.0f,
+           "auto-master release score should be usable for a clean quiet fixture");
 }
 
 void autoMasterReducesHotProgramMaterial()

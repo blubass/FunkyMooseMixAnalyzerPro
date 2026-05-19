@@ -131,6 +131,9 @@ struct AnalyzerMetrics
     float autoMasterProjectedLufs = -120.0f;
     float autoMasterProjectedTruePeakDbTp = -120.0f;
     float autoMasterLoudnessMatchGainDb = 0.0f;
+    float autoMasterLufsDeltaDb = 0.0f;
+    float autoMasterTruePeakMarginDb = 0.0f;
+    float autoMasterReleaseScore = 0.0f;
     std::array<float, bandCount> bandPercents {};
     std::array<float, bandCount> bandCorrelations { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
     std::array<float, bandCount> bandSideRatiosDb { -120.0f, -120.0f, -120.0f, -120.0f, -120.0f, -120.0f };

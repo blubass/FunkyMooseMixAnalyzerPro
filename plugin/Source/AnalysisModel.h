@@ -126,6 +126,7 @@ struct AnalyzerMetrics
     float autoMasterPresenceDb = 0.0f;
     float autoMasterAirShelfDb = 0.0f;
     float autoMasterWidthPercent = 100.0f;
+    float autoMasterGlueReductionDb = 0.0f;
     float autoMasterLimiterReductionDb = 0.0f;
     std::array<float, bandCount> bandPercents {};
     std::array<float, bandCount> bandCorrelations { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };

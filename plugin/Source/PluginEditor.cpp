@@ -326,6 +326,9 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
                                                 + " / P " + formatSigned(metrics.autoMasterPresenceDb, " dB", 1)
                                                 + " / A " + formatSigned(metrics.autoMasterAirShelfDb, " dB", 1)
                                               : "N/A"},
+        {"AM Dyn", metrics.autoMasterEnabled ? "Glue " + juce::String(metrics.autoMasterGlueReductionDb, 1)
+                                               + " / Lim " + juce::String(metrics.autoMasterLimiterReductionDb, 1) + " dB"
+                                             : "N/A"},
         {"Clipping", juce::String(metrics.clippedPercent, 3) + "%"},
         {"Worst Clip", juce::String(metrics.worstClippedPercent, 3) + "%"},
         {"TP Margin", hasTruePeak ? formatSigned(truePeakMargin, " dB") : "N/A"},
@@ -334,7 +337,7 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
         {"Apple -16", formatDeliveryPreview(-16.0f)},
         {"Broadcast", formatDeliveryPreview(-23.0f)}
     };
-    qualityData.rowHeight = 12.8f;
+    qualityData.rowHeight = 11.8f;
     qualityData.barValue = hasTruePeak ? juce::jlimit(0.0f, 1.0f, (truePeakMargin + 1.0f) / 5.0f) : 0.0f;
     qualityData.barColour = hasTruePeak ? (truePeakMargin < 0.0f ? Theme::danger : truePeakMargin < 1.0f ? Theme::amber : Theme::success) : Theme::muted;
     qualityCard.update(qualityData);
@@ -519,6 +522,7 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::smoothDisplayMetrics(const fmma:
     metrics.autoMasterPresenceDb = smoothValue(metrics.autoMasterPresenceDb, raw.autoMasterPresenceDb, amount);
     metrics.autoMasterAirShelfDb = smoothValue(metrics.autoMasterAirShelfDb, raw.autoMasterAirShelfDb, amount);
     metrics.autoMasterWidthPercent = smoothValue(metrics.autoMasterWidthPercent, raw.autoMasterWidthPercent, amount);
+    metrics.autoMasterGlueReductionDb = smoothValue(metrics.autoMasterGlueReductionDb, raw.autoMasterGlueReductionDb, amount);
     metrics.autoMasterLimiterReductionDb = smoothValue(metrics.autoMasterLimiterReductionDb, raw.autoMasterLimiterReductionDb, amount);
 
     for (size_t i = 0; i < fmma::bandCount; ++i)
@@ -894,6 +898,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
                << ", presence " << formatSigned(sourceMetrics.autoMasterPresenceDb, " dB")
                << ", air " << formatSigned(sourceMetrics.autoMasterAirShelfDb, " dB")
                << ", width " << juce::String(sourceMetrics.autoMasterWidthPercent, 0) << "%\n";
+        report << "Auto Master Glue GR: " << juce::String(sourceMetrics.autoMasterGlueReductionDb, 1) << " dB\n";
         report << "Auto Master Limiter GR: " << juce::String(sourceMetrics.autoMasterLimiterReductionDb, 1) << " dB\n";
     }
     report << "Verdict: " << sourceAssessment.verdictTitle << "\n";
@@ -1166,6 +1171,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     setJsonProperty(autoMasterJson, "presenceDb", jsonNumber(sourceMetrics.autoMasterPresenceDb));
     setJsonProperty(autoMasterJson, "airShelfDb", jsonNumber(sourceMetrics.autoMasterAirShelfDb));
     setJsonProperty(autoMasterJson, "widthPercent", jsonNumber(sourceMetrics.autoMasterWidthPercent));
+    setJsonProperty(autoMasterJson, "glueReductionDb", jsonNumber(sourceMetrics.autoMasterGlueReductionDb));
     setJsonProperty(autoMasterJson, "limiterReductionDb", jsonNumber(sourceMetrics.autoMasterLimiterReductionDb));
     setJsonProperty(root, "autoMaster", autoMasterJson);
 

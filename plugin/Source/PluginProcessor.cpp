@@ -28,6 +28,7 @@ constexpr float autoMasterMaxLowShelfCutDb = -2.0f;
 constexpr float autoMasterMaxPresenceBoostDb = 0.8f;
 constexpr float autoMasterMaxPresenceCutDb = -2.0f;
 constexpr float autoMasterMaxAirBoostDb = 0.8f;
+constexpr float autoMasterMaxGlueReductionDb = 2.5f;
 
 constexpr std::array<std::pair<float, float>, fmma::bandCount> bandRanges {{
     {20.0f, 60.0f},
@@ -686,6 +687,11 @@ void FunkyMooseMixAnalyzerAudioProcessor::resetAutoMasterState() noexcept
     smoothedAutoMasterPresenceDb = 0.0f;
     smoothedAutoMasterAirShelfDb = 0.0f;
     smoothedAutoMasterSideGain = 1.0f;
+    smoothedAutoMasterGlueDepthDb = 0.0f;
+    autoMasterGlueGain = 1.0f;
+    autoMasterLimiterGain = 1.0f;
+    displayedAutoMasterGlueReductionDb = 0.0f;
+    displayedAutoMasterLimiterReductionDb = 0.0f;
 
     for (auto& filter : autoMasterLowShelfFilters)
     {
@@ -711,6 +717,7 @@ void FunkyMooseMixAnalyzerAudioProcessor::resetAutoMasterState() noexcept
     autoMasterPresenceDb.store(0.0f, std::memory_order_relaxed);
     autoMasterAirShelfDb.store(0.0f, std::memory_order_relaxed);
     autoMasterWidthPercent.store(100.0f, std::memory_order_relaxed);
+    autoMasterGlueReductionDb.store(0.0f, std::memory_order_relaxed);
     autoMasterLimiterReductionDb.store(0.0f, std::memory_order_relaxed);
 }
 
@@ -843,15 +850,35 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
     }
     targetSideGain = 1.0f + ((targetSideGain - 1.0f) * strength * trust);
 
+    auto targetGlueDepthDb = 0.0f;
+    auto crestForGlueDb = metrics.crestDb;
+    if (hasTruePeak && std::isfinite(metrics.rmsDb) && metrics.rmsDb > -119.0f)
+        crestForGlueDb = juce::jmax(crestForGlueDb, truePeakForSafety - metrics.rmsDb);
+
+    if (trust > 0.0f && std::isfinite(crestForGlueDb))
+    {
+        if (crestForGlueDb > profile.crestRange.high + 1.0f)
+            targetGlueDepthDb += (crestForGlueDb - profile.crestRange.high) * 0.20f;
+        if (metrics.lraLu > 0.0f && metrics.lraLu > 10.0f)
+            targetGlueDepthDb += (metrics.lraLu - 10.0f) * 0.10f;
+        if (metrics.transientDensity > 4.0f && metrics.attackTimeMs > 0.0f && metrics.attackTimeMs < 14.0f)
+            targetGlueDepthDb += juce::jlimit(0.0f, 0.8f, (metrics.transientDensity - 4.0f) * 0.08f);
+        if (crestForGlueDb < profile.crestRange.low + 0.5f)
+            targetGlueDepthDb *= 0.35f;
+    }
+    targetGlueDepthDb = juce::jlimit(0.0f, autoMasterMaxGlueReductionDb, targetGlueDepthDb * strength * trust);
+
     const auto blockSeconds = static_cast<float>(static_cast<double>(numSamples) / currentSampleRate);
     const auto gainSmoothing = smoothingForWindow(blockSeconds, targetGainDb < smoothedAutoMasterGainDb ? 0.28f : 1.6f);
     const auto toneSmoothing = smoothingForWindow(blockSeconds, 2.2f);
     const auto widthSmoothing = smoothingForWindow(blockSeconds, 1.2f);
+    const auto glueSmoothing = smoothingForWindow(blockSeconds, 2.8f);
     smoothedAutoMasterGainDb = smoothed(smoothedAutoMasterGainDb, targetGainDb, gainSmoothing);
     smoothedAutoMasterLowShelfDb = smoothed(smoothedAutoMasterLowShelfDb, targetLowShelfDb, toneSmoothing);
     smoothedAutoMasterPresenceDb = smoothed(smoothedAutoMasterPresenceDb, targetPresenceDb, toneSmoothing);
     smoothedAutoMasterAirShelfDb = smoothed(smoothedAutoMasterAirShelfDb, targetAirShelfDb, toneSmoothing);
     smoothedAutoMasterSideGain = smoothed(smoothedAutoMasterSideGain, targetSideGain, widthSmoothing);
+    smoothedAutoMasterGlueDepthDb = smoothed(smoothedAutoMasterGlueDepthDb, targetGlueDepthDb, glueSmoothing);
 
     const auto channelsToProcess = juce::jmin(juce::jmin(channelCount, buffer.getNumChannels()), 2);
     for (auto channel = 0; channel < channelsToProcess; ++channel)
@@ -865,9 +892,54 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
     const auto ceilingGain = decibelsToGain(autoMasterDefaultCeilingDbTp);
     const auto kneeStart = ceilingGain * 0.94f;
     const auto kneeRange = juce::jmax(ceilingGain - kneeStart, 1.0e-6f);
+    const auto sampleTimeSeconds = 1.0f / static_cast<float>(juce::jmax(1.0, currentSampleRate));
+    const auto glueAttack = smoothingForWindow(sampleTimeSeconds, 0.018f);
+    const auto glueRelease = smoothingForWindow(sampleTimeSeconds, 0.240f);
+    const auto limiterAttack = smoothingForWindow(sampleTimeSeconds, 0.0007f);
+    const auto limiterRelease = smoothingForWindow(sampleTimeSeconds, 0.085f);
+    const auto glueThresholdDb = -18.0f + juce::jlimit(-3.0f, 3.0f, smoothedAutoMasterGainDb * 0.20f);
+    const auto glueRatio = 1.0f + (0.65f * strength * trust);
+    auto maxGlueReductionDb = 0.0f;
     auto maxLimiterReductionDb = 0.0f;
 
-    auto limitSample = [&] (float sample) noexcept
+    auto nextGlueGain = [&] (float linkedPeak) noexcept
+    {
+        auto wantedGain = 1.0f;
+        if (smoothedAutoMasterGlueDepthDb > 0.01f
+            && linkedPeak > 1.0e-6f
+            && glueRatio > 1.01f)
+        {
+            const auto levelDb = gainToDecibels(linkedPeak);
+            if (levelDb > glueThresholdDb)
+            {
+                const auto overDb = levelDb - glueThresholdDb;
+                const auto reductionDb = juce::jlimit(0.0f,
+                                                      smoothedAutoMasterGlueDepthDb,
+                                                      overDb * (1.0f - (1.0f / glueRatio)));
+                wantedGain = decibelsToGain(-reductionDb);
+            }
+        }
+
+        const auto smoothing = wantedGain < autoMasterGlueGain ? glueAttack : glueRelease;
+        autoMasterGlueGain += (wantedGain - autoMasterGlueGain) * smoothing;
+        autoMasterGlueGain = juce::jlimit(0.05f, 1.0f, autoMasterGlueGain);
+        maxGlueReductionDb = juce::jmax(maxGlueReductionDb, -gainToDecibels(autoMasterGlueGain));
+        return autoMasterGlueGain;
+    };
+
+    auto nextLimiterGain = [&] (float linkedPeak) noexcept
+    {
+        const auto wantedGain = linkedPeak > ceilingGain
+            ? juce::jlimit(0.0f, 1.0f, ceilingGain / juce::jmax(linkedPeak, 1.0e-6f))
+            : 1.0f;
+        const auto smoothing = wantedGain < autoMasterLimiterGain ? limiterAttack : limiterRelease;
+        autoMasterLimiterGain += (wantedGain - autoMasterLimiterGain) * smoothing;
+        autoMasterLimiterGain = juce::jlimit(0.02f, 1.0f, autoMasterLimiterGain);
+        maxLimiterReductionDb = juce::jmax(maxLimiterReductionDb, -gainToDecibels(autoMasterLimiterGain));
+        return autoMasterLimiterGain;
+    };
+
+    auto guardSample = [&] (float sample) noexcept
     {
         if (! std::isfinite(sample))
             return 0.0f;
@@ -893,7 +965,10 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
             value = autoMasterLowShelfFilters[0].process(value);
             value = autoMasterPresenceFilters[0].process(value);
             value = autoMasterAirShelfFilters[0].process(value);
-            mono[sample] = limitSample(value * outputGain);
+            value *= nextGlueGain(std::abs(value));
+            value *= outputGain;
+            value *= nextLimiterGain(std::abs(value));
+            mono[sample] = guardSample(value);
         }
     }
     else if (channelsToProcess >= 2)
@@ -916,8 +991,13 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
             r = autoMasterPresenceFilters[1].process(r);
             r = autoMasterAirShelfFilters[1].process(r);
 
-            left[sample] = limitSample(l * outputGain);
-            right[sample] = limitSample(r * outputGain);
+            const auto glueGain = nextGlueGain(juce::jmax(std::abs(l), std::abs(r)));
+            l *= glueGain * outputGain;
+            r *= glueGain * outputGain;
+
+            const auto limiterGain = nextLimiterGain(juce::jmax(std::abs(l), std::abs(r)));
+            left[sample] = guardSample(l * limiterGain);
+            right[sample] = guardSample(r * limiterGain);
         }
     }
 
@@ -926,7 +1006,17 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
     autoMasterPresenceDb.store(smoothedAutoMasterPresenceDb, std::memory_order_relaxed);
     autoMasterAirShelfDb.store(smoothedAutoMasterAirShelfDb, std::memory_order_relaxed);
     autoMasterWidthPercent.store(smoothedAutoMasterSideGain * 100.0f, std::memory_order_relaxed);
-    autoMasterLimiterReductionDb.store(maxLimiterReductionDb, std::memory_order_relaxed);
+    const auto glueDisplayRelease = smoothingForWindow(blockSeconds, 1.4f);
+    const auto limiterDisplayRelease = smoothingForWindow(blockSeconds, 0.9f);
+    displayedAutoMasterGlueReductionDb = maxGlueReductionDb > displayedAutoMasterGlueReductionDb
+        ? maxGlueReductionDb
+        : smoothed(displayedAutoMasterGlueReductionDb, maxGlueReductionDb, glueDisplayRelease);
+    displayedAutoMasterLimiterReductionDb = maxLimiterReductionDb > displayedAutoMasterLimiterReductionDb
+        ? maxLimiterReductionDb
+        : smoothed(displayedAutoMasterLimiterReductionDb, maxLimiterReductionDb, limiterDisplayRelease);
+
+    autoMasterGlueReductionDb.store(displayedAutoMasterGlueReductionDb, std::memory_order_relaxed);
+    autoMasterLimiterReductionDb.store(displayedAutoMasterLimiterReductionDb, std::memory_order_relaxed);
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::timerCallback()
@@ -1721,6 +1811,7 @@ fmma::AnalyzerMetrics FunkyMooseMixAnalyzerAudioProcessor::getMetrics() const
     metrics.autoMasterPresenceDb = autoMasterPresenceDb.load(std::memory_order_relaxed);
     metrics.autoMasterAirShelfDb = autoMasterAirShelfDb.load(std::memory_order_relaxed);
     metrics.autoMasterWidthPercent = autoMasterWidthPercent.load(std::memory_order_relaxed);
+    metrics.autoMasterGlueReductionDb = autoMasterGlueReductionDb.load(std::memory_order_relaxed);
     metrics.autoMasterLimiterReductionDb = autoMasterLimiterReductionDb.load(std::memory_order_relaxed);
 
     for (auto band = 0; band < fmma::bandCount; ++band)

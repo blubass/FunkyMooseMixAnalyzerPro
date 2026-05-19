@@ -369,6 +369,7 @@ def plugin_report_to_analysis(report, req_id):
             "presence_db": rounded_number(auto_master_payload.get("presenceDb"), 2),
             "air_shelf_db": rounded_number(auto_master_payload.get("airShelfDb"), 2),
             "width_percent": rounded_number(auto_master_payload.get("widthPercent"), 1),
+            "glue_reduction_db": rounded_number(auto_master_payload.get("glueReductionDb"), 2),
             "limiter_reduction_db": rounded_number(auto_master_payload.get("limiterReductionDb"), 2),
         },
         "aggregate": aggregate,

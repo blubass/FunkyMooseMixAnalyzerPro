@@ -73,6 +73,7 @@ class PluginBridge:
         # confidence domains (5 ints) -> 28, 29, 30, 31, 32
         # release gate score / ready -> 33, 34
         # auto master enabled, strength, target, ceiling, gain, low, presence, air, width, limiter GR -> 35..44
+        # auto master glue GR -> 45
 
         if len(args) < 27:
             return
@@ -106,6 +107,7 @@ class PluginBridge:
                 "airShelfDb": float(args[42]),
                 "widthPercent": float(args[43]),
                 "limiterReductionDb": float(args[44]),
+                "glueReductionDb": float(args[45]) if len(args) >= 46 else 0.0,
             }
 
         with self.lock:

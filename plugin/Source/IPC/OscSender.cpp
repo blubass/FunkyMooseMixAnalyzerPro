@@ -82,6 +82,7 @@ void OscSender::send(const fmma::AnalyzerMetrics& m,
     msg.addFloat32(m.autoMasterAirShelfDb);
     msg.addFloat32(m.autoMasterWidthPercent);
     msg.addFloat32(m.autoMasterLimiterReductionDb);
+    msg.addFloat32(m.autoMasterGlueReductionDb);
 
     sender.send(msg);
 }

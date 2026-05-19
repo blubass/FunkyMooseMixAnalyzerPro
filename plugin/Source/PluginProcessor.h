@@ -224,6 +224,7 @@ private:
     std::atomic<float> autoMasterPresenceDb {0.0f};
     std::atomic<float> autoMasterAirShelfDb {0.0f};
     std::atomic<float> autoMasterWidthPercent {100.0f};
+    std::atomic<float> autoMasterGlueReductionDb {0.0f};
     std::atomic<float> autoMasterLimiterReductionDb {0.0f};
     std::array<std::atomic<float>, fmma::bandCount> bandPercents {};
     std::array<std::atomic<float>, fmma::bandCount> bandCorrelations {};
@@ -234,6 +235,11 @@ private:
     float smoothedAutoMasterPresenceDb = 0.0f;
     float smoothedAutoMasterAirShelfDb = 0.0f;
     float smoothedAutoMasterSideGain = 1.0f;
+    float smoothedAutoMasterGlueDepthDb = 0.0f;
+    float autoMasterGlueGain = 1.0f;
+    float autoMasterLimiterGain = 1.0f;
+    float displayedAutoMasterGlueReductionDb = 0.0f;
+    float displayedAutoMasterLimiterReductionDb = 0.0f;
 
     mutable juce::CriticalSection storedAnalysisLock;
     fmma::AnalyzerMetrics storedReferenceMetrics;

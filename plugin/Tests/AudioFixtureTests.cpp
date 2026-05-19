@@ -169,6 +169,29 @@ juce::AudioBuffer<float> makeClippedSine(float seconds, float frequency, float d
     return buffer;
 }
 
+juce::AudioBuffer<float> makeTransientProgram(float seconds)
+{
+    auto buffer = makeBuffer(seconds);
+    const auto transientInterval = static_cast<int>(testSampleRate * 0.5);
+    for (auto sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        const auto bed = sineSample(sample, 140.0f, juce::Decibels::decibelsToGain(-40.0f))
+                       + sineSample(sample, 920.0f, juce::Decibels::decibelsToGain(-46.0f));
+        const auto transientPosition = sample % transientInterval;
+        const auto transient = transientPosition < 180
+            ? 0.92f * std::exp(static_cast<float>(-transientPosition) / 28.0f)
+                * std::sin((2.0f * pi * 1800.0f * static_cast<float>(transientPosition)
+                             / static_cast<float>(testSampleRate))
+                           + (pi * 0.5f))
+            : 0.0f;
+        const auto value = juce::jlimit(-0.95f, 0.95f, bed + transient);
+        buffer.setSample(0, sample, value);
+        buffer.setSample(1, sample, value);
+    }
+
+    return buffer;
+}
+
 juce::File fixtureDirectory()
 {
     auto dir = juce::File::getCurrentWorkingDirectory()
@@ -302,6 +325,30 @@ juce::AudioBuffer<float> renderFixture(const juce::AudioBuffer<float>& source,
     }
 
     return rendered;
+}
+
+fmma::AnalyzerMetrics renderFixtureMetrics(const juce::AudioBuffer<float>& source,
+                                           bool autoMasterEnabled,
+                                           float strengthNormalised = 1.0f)
+{
+    auto processor = makePreparedProcessor();
+    setParameterNormalised(*processor, "autoMasterEnabled", autoMasterEnabled ? 1.0f : 0.0f);
+    setParameterNormalised(*processor, "autoMasterStrength", strengthNormalised);
+
+    juce::MidiBuffer midi;
+    auto offset = 0;
+    while (offset < source.getNumSamples())
+    {
+        const auto samplesThisBlock = juce::jmin(testBlockSize, source.getNumSamples() - offset);
+        juce::AudioBuffer<float> block { 2, samplesThisBlock };
+        for (auto channel = 0; channel < 2; ++channel)
+            block.copyFrom(channel, 0, source, juce::jmin(channel, source.getNumChannels() - 1), offset, samplesThisBlock);
+
+        processor->processBlock(block, midi);
+        offset += samplesThisBlock;
+    }
+
+    return processor->getMetrics();
 }
 
 float bufferPeak(const juce::AudioBuffer<float>& buffer, int startSample = 0) noexcept
@@ -592,6 +639,21 @@ void autoMasterReducesHotProgramMaterial()
            "auto-master should reduce very hot material instead of driving the limiter");
 }
 
+void autoMasterUsesGlueOnPeakyProgramMaterial()
+{
+    const auto metrics = renderFixtureMetrics(makeTransientProgram(30.0f), true);
+
+    expect(metrics.autoMasterGlueReductionDb > 0.05f,
+           "auto-master should report glue gain reduction on peaky program material, got "
+               + juce::String(metrics.autoMasterGlueReductionDb, 3)
+               + " dB; crest " + juce::String(metrics.crestDb, 1)
+               + " dB, LRA " + juce::String(metrics.lraLu, 1)
+               + " LU, transients " + juce::String(metrics.transientDensity, 1)
+               + "/s, attack " + juce::String(metrics.attackTimeMs, 1) + " ms");
+    expect(metrics.autoMasterLimiterReductionDb < 6.0f,
+           "auto-master glue should keep limiter reduction within a sane range");
+}
+
 void runFixtureTest(const char* name, void (*test)())
 {
     std::cerr << "RUN " << name << std::endl;
@@ -614,6 +676,7 @@ int main()
     runFixtureTest("autoMasterBypassesWhenDisabled", autoMasterBypassesWhenDisabled);
     runFixtureTest("autoMasterRaisesQuietProgramMaterial", autoMasterRaisesQuietProgramMaterial);
     runFixtureTest("autoMasterReducesHotProgramMaterial", autoMasterReducesHotProgramMaterial);
+    runFixtureTest("autoMasterUsesGlueOnPeakyProgramMaterial", autoMasterUsesGlueOnPeakyProgramMaterial);
     if (failures == 0)
     {
         std::cout << "AudioFixtureTests OK\n";

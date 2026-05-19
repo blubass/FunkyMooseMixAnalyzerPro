@@ -94,6 +94,20 @@ float audioEvidenceTrust(float seconds) noexcept
     return juce::jlimit(0.0f, 1.0f, (seconds - 2.0f) / 18.0f);
 }
 
+float distanceOutsideRange(float value, const fmma::Range& range) noexcept
+{
+    if (! std::isfinite(value))
+        return 0.0f;
+
+    if (value < range.low)
+        return range.low - value;
+
+    if (value > range.high)
+        return value - range.high;
+
+    return 0.0f;
+}
+
 void updateMaximum(std::atomic<float>& target, float value) noexcept
 {
     if (! std::isfinite(value))
@@ -725,6 +739,11 @@ void FunkyMooseMixAnalyzerAudioProcessor::resetAutoMasterState() noexcept
     autoMasterLufsDeltaDb.store(0.0f, std::memory_order_relaxed);
     autoMasterTruePeakMarginDb.store(0.0f, std::memory_order_relaxed);
     autoMasterReleaseScore.store(0.0f, std::memory_order_relaxed);
+    autoMasterAbLoudnessDeltaDb.store(0.0f, std::memory_order_relaxed);
+    autoMasterAbTruePeakDbTp.store(-120.0f, std::memory_order_relaxed);
+    autoMasterAbTruePeakDeltaDb.store(0.0f, std::memory_order_relaxed);
+    autoMasterAbDynamicsDeltaDb.store(0.0f, std::memory_order_relaxed);
+    autoMasterAbScore.store(0.0f, std::memory_order_relaxed);
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<float>& buffer,
@@ -1054,13 +1073,130 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
         releaseScore = juce::jlimit(0.0f, 100.0f, releaseScore * (0.65f + (0.35f * trust)));
     }
 
+    const auto loudnessMatchGainDb = hasLoudness ? -smoothedAutoMasterGainDb : 0.0f;
+    const auto abMatchedLufs = hasLoudness
+        ? juce::jlimit(-120.0f, 24.0f, projectedLufs + loudnessMatchGainDb)
+        : -120.0f;
+    const auto abLoudnessDelta = hasLoudness ? abMatchedLufs - metrics.integratedLufs : 0.0f;
+    const auto abTruePeakDb = hasTruePeak
+        ? juce::jlimit(-120.0f, 24.0f, projectedTruePeak + loudnessMatchGainDb)
+        : -120.0f;
+    const auto abTruePeakDelta = hasTruePeak ? abTruePeakDb - truePeakForSafety : 0.0f;
+    const auto abDynamicsDelta = hasTruePeak
+        ? -juce::jlimit(0.0f, 12.0f, displayedAutoMasterGlueReductionDb + displayedAutoMasterLimiterReductionDb)
+        : 0.0f;
+    auto abScore = 0.0f;
+    if (hasLoudness && hasTruePeak)
+    {
+        auto truePeakRisk = [] (float marginDb) noexcept
+        {
+            if (! std::isfinite(marginDb))
+                return 0.0f;
+
+            if (marginDb < 0.0f)
+                return 8.0f + (-marginDb * 6.0f);
+
+            return marginDb < 0.5f ? (0.5f - marginDb) * 4.0f : 0.0f;
+        };
+
+        auto stereoRisk = [&profile] (float corr,
+                                      float monoLoss,
+                                      float lowCorr,
+                                      float lowSideDb,
+                                      float width) noexcept
+        {
+            auto risk = 0.0f;
+            if (std::isfinite(corr))
+                risk += juce::jmax(0.0f, profile.correlationMin - corr) * 20.0f;
+            if (std::isfinite(monoLoss))
+                risk += juce::jmax(0.0f, -2.5f - monoLoss) * 1.5f;
+            if (std::isfinite(lowCorr))
+                risk += juce::jmax(0.0f, 0.65f - lowCorr) * 18.0f;
+            if (std::isfinite(lowSideDb))
+                risk += juce::jmax(0.0f, lowSideDb + 6.0f) * 1.2f;
+            if (! profile.wideExpected && std::isfinite(width))
+                risk += juce::jmax(0.0f, width - 45.0f) * 0.12f;
+            return risk;
+        };
+
+        const auto estimatedLowEnd = std::isfinite(lowEndPercent)
+            ? juce::jlimit(0.0f, 100.0f, lowEndPercent + (smoothedAutoMasterLowShelfDb * 4.5f))
+            : lowEndPercent;
+        const auto estimatedPresence = std::isfinite(presencePercent)
+            ? juce::jlimit(0.0f, 100.0f, presencePercent + (smoothedAutoMasterPresenceDb * 5.5f))
+            : presencePercent;
+        const auto toneRiskBefore = distanceOutsideRange(lowEndPercent, profile.lowEndRange)
+            + (std::isfinite(presencePercent) ? juce::jmax(0.0f, presencePercent - profile.presenceMax) : 0.0f);
+        const auto toneRiskAfter = distanceOutsideRange(estimatedLowEnd, profile.lowEndRange)
+            + (std::isfinite(estimatedPresence) ? juce::jmax(0.0f, estimatedPresence - profile.presenceMax) : 0.0f);
+
+        const auto sideGainDeltaDb = gainToDecibels(smoothedAutoMasterSideGain);
+        const auto estimatedWidth = std::isfinite(metrics.widthPct)
+            ? juce::jmax(0.0f, metrics.widthPct * smoothedAutoMasterSideGain)
+            : metrics.widthPct;
+        const auto abLowEndCorrelation = fmma::lowEndCorrelationOf(metrics);
+        const auto abLowEndSideDb = fmma::lowEndSideDbOf(metrics);
+        const auto estimatedCorrelation = std::isfinite(metrics.correlation)
+            ? juce::jlimit(-1.0f, 1.0f, metrics.correlation + ((1.0f - smoothedAutoMasterSideGain) * 0.35f))
+            : metrics.correlation;
+        const auto estimatedMonoLoss = std::isfinite(metrics.monoLossDb)
+            ? metrics.monoLossDb + (juce::jmax(0.0f, 1.0f - smoothedAutoMasterSideGain) * 2.0f)
+            : metrics.monoLossDb;
+        const auto estimatedLowEndCorrelation = std::isfinite(abLowEndCorrelation)
+            ? juce::jlimit(-1.0f, 1.0f, abLowEndCorrelation + (juce::jmax(0.0f, 1.0f - smoothedAutoMasterSideGain) * 0.25f))
+            : abLowEndCorrelation;
+        const auto estimatedLowEndSideDb = std::isfinite(abLowEndSideDb) ? abLowEndSideDb + sideGainDeltaDb
+                                                                          : abLowEndSideDb;
+        const auto stereoRiskBefore = stereoRisk(metrics.correlation,
+                                                 metrics.monoLossDb,
+                                                 abLowEndCorrelation,
+                                                 abLowEndSideDb,
+                                                 metrics.widthPct);
+        const auto stereoRiskAfter = stereoRisk(estimatedCorrelation,
+                                                estimatedMonoLoss,
+                                                estimatedLowEndCorrelation,
+                                                estimatedLowEndSideDb,
+                                                estimatedWidth);
+
+        const auto originalTruePeakMargin = autoMasterDefaultCeilingDbTp - truePeakForSafety;
+        const auto abTruePeakMargin = autoMasterDefaultCeilingDbTp - abTruePeakDb;
+        const auto truePeakRiskBefore = truePeakRisk(originalTruePeakMargin);
+        const auto truePeakRiskAfter = truePeakRisk(abTruePeakMargin);
+        const auto reductionLoadDb = displayedAutoMasterGlueReductionDb + displayedAutoMasterLimiterReductionDb;
+        const auto nonGainMovement = std::abs(smoothedAutoMasterLowShelfDb)
+            + std::abs(smoothedAutoMasterPresenceDb)
+            + std::abs(smoothedAutoMasterAirShelfDb)
+            + (std::abs(smoothedAutoMasterSideGain - 1.0f) * 10.0f)
+            + reductionLoadDb;
+
+        abScore = 50.0f;
+        abScore += juce::jlimit(-18.0f, 20.0f, (toneRiskBefore - toneRiskAfter) * 3.0f);
+        abScore += juce::jlimit(-15.0f, 18.0f, (stereoRiskBefore - stereoRiskAfter) * 2.5f);
+        abScore += juce::jlimit(-14.0f, 18.0f, (truePeakRiskBefore - truePeakRiskAfter) * 2.2f);
+        abScore -= juce::jlimit(0.0f, 20.0f, std::abs(abLoudnessDelta) * 30.0f);
+        abScore -= juce::jlimit(0.0f, 15.0f, juce::jmax(0.0f, reductionLoadDb - 4.0f) * 5.0f);
+        abScore -= juce::jlimit(0.0f, 10.0f, juce::jmax(0.0f, nonGainMovement - 6.0f) * 2.0f);
+
+        if (nonGainMovement < 0.35f && std::abs(smoothedAutoMasterGainDb) > 1.0f)
+            abScore = juce::jmin(abScore, 58.0f);
+
+        if (releaseScore > 0.0f)
+            abScore = juce::jmin(abScore, releaseScore + 18.0f);
+
+        abScore = juce::jlimit(0.0f, 100.0f, abScore * (0.65f + (0.35f * trust)));
+    }
+
     autoMasterProjectedLufs.store(projectedLufs, std::memory_order_relaxed);
     autoMasterProjectedTruePeakDbTp.store(projectedTruePeak, std::memory_order_relaxed);
-    autoMasterLoudnessMatchGainDb.store(hasLoudness ? -smoothedAutoMasterGainDb : 0.0f,
-                                        std::memory_order_relaxed);
+    autoMasterLoudnessMatchGainDb.store(loudnessMatchGainDb, std::memory_order_relaxed);
     autoMasterLufsDeltaDb.store(projectedLufsDelta, std::memory_order_relaxed);
     autoMasterTruePeakMarginDb.store(projectedTruePeakMargin, std::memory_order_relaxed);
     autoMasterReleaseScore.store(releaseScore, std::memory_order_relaxed);
+    autoMasterAbLoudnessDeltaDb.store(abLoudnessDelta, std::memory_order_relaxed);
+    autoMasterAbTruePeakDbTp.store(abTruePeakDb, std::memory_order_relaxed);
+    autoMasterAbTruePeakDeltaDb.store(abTruePeakDelta, std::memory_order_relaxed);
+    autoMasterAbDynamicsDeltaDb.store(abDynamicsDelta, std::memory_order_relaxed);
+    autoMasterAbScore.store(abScore, std::memory_order_relaxed);
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::timerCallback()
@@ -1863,6 +1999,11 @@ fmma::AnalyzerMetrics FunkyMooseMixAnalyzerAudioProcessor::getMetrics() const
     metrics.autoMasterLufsDeltaDb = autoMasterLufsDeltaDb.load(std::memory_order_relaxed);
     metrics.autoMasterTruePeakMarginDb = autoMasterTruePeakMarginDb.load(std::memory_order_relaxed);
     metrics.autoMasterReleaseScore = autoMasterReleaseScore.load(std::memory_order_relaxed);
+    metrics.autoMasterAbLoudnessDeltaDb = autoMasterAbLoudnessDeltaDb.load(std::memory_order_relaxed);
+    metrics.autoMasterAbTruePeakDbTp = autoMasterAbTruePeakDbTp.load(std::memory_order_relaxed);
+    metrics.autoMasterAbTruePeakDeltaDb = autoMasterAbTruePeakDeltaDb.load(std::memory_order_relaxed);
+    metrics.autoMasterAbDynamicsDeltaDb = autoMasterAbDynamicsDeltaDb.load(std::memory_order_relaxed);
+    metrics.autoMasterAbScore = autoMasterAbScore.load(std::memory_order_relaxed);
 
     for (auto band = 0; band < fmma::bandCount; ++band)
     {

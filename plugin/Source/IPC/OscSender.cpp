@@ -89,6 +89,11 @@ void OscSender::send(const fmma::AnalyzerMetrics& m,
     msg.addFloat32(m.autoMasterLufsDeltaDb);
     msg.addFloat32(m.autoMasterTruePeakMarginDb);
     msg.addFloat32(m.autoMasterReleaseScore);
+    msg.addFloat32(m.autoMasterAbLoudnessDeltaDb);
+    msg.addFloat32(m.autoMasterAbTruePeakDbTp);
+    msg.addFloat32(m.autoMasterAbTruePeakDeltaDb);
+    msg.addFloat32(m.autoMasterAbDynamicsDeltaDb);
+    msg.addFloat32(m.autoMasterAbScore);
 
     sender.send(msg);
 }

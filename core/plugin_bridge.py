@@ -76,6 +76,7 @@ class PluginBridge:
         # auto master glue GR -> 45
         # auto master projected LUFS, projected TP, loudness-match gain -> 46, 47, 48
         # auto master LUFS delta, TP margin, release score -> 49, 50, 51
+        # auto master A/B loudness delta, matched TP, TP delta, dynamics delta, score -> 52..56
 
         if len(args) < 27:
             return
@@ -116,6 +117,11 @@ class PluginBridge:
                 "lufsDeltaDb": float(args[49]) if len(args) >= 50 else 0.0,
                 "truePeakMarginDb": float(args[50]) if len(args) >= 51 else 0.0,
                 "releaseScore": float(args[51]) if len(args) >= 52 else 0.0,
+                "abLoudnessDeltaDb": float(args[52]) if len(args) >= 53 else 0.0,
+                "abTruePeakDbTp": float(args[53]) if len(args) >= 54 else None,
+                "abTruePeakDeltaDb": float(args[54]) if len(args) >= 55 else 0.0,
+                "abDynamicsDeltaDb": float(args[55]) if len(args) >= 56 else 0.0,
+                "abScore": float(args[56]) if len(args) >= 57 else 0.0,
             }
 
         with self.lock:

@@ -643,6 +643,12 @@ void autoMasterRaisesQuietProgramMaterial()
            "auto-master true-peak margin should be finite when true-peak evidence exists");
     expect(metrics.autoMasterReleaseScore > 50.0f,
            "auto-master release score should be usable for a clean quiet fixture");
+    expect(std::abs(metrics.autoMasterAbLoudnessDeltaDb) < 0.10f,
+           "auto-master A/B comparison should stay loudness matched");
+    expect(metrics.autoMasterAbTruePeakDbTp <= metrics.autoMasterProjectedTruePeakDbTp,
+           "auto-master A/B true peak should include the loudness-match trim");
+    expect(metrics.autoMasterAbScore >= 0.0f && metrics.autoMasterAbScore <= 100.0f,
+           "auto-master A/B score should stay in a bounded professional range");
 }
 
 void autoMasterReducesHotProgramMaterial()
@@ -669,6 +675,8 @@ void autoMasterUsesGlueOnPeakyProgramMaterial()
                + "/s, attack " + juce::String(metrics.attackTimeMs, 1) + " ms");
     expect(metrics.autoMasterLimiterReductionDb < 6.0f,
            "auto-master glue should keep limiter reduction within a sane range");
+    expect(metrics.autoMasterAbDynamicsDeltaDb <= -metrics.autoMasterGlueReductionDb * 0.5f,
+           "auto-master A/B dynamics delta should reflect glue/limiter gain reduction");
 }
 
 void runFixtureTest(const char* name, void (*test)())

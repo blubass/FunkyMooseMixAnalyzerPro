@@ -232,6 +232,11 @@ private:
     std::atomic<float> autoMasterLufsDeltaDb {0.0f};
     std::atomic<float> autoMasterTruePeakMarginDb {0.0f};
     std::atomic<float> autoMasterReleaseScore {0.0f};
+    std::atomic<float> autoMasterAbLoudnessDeltaDb {0.0f};
+    std::atomic<float> autoMasterAbTruePeakDbTp {-120.0f};
+    std::atomic<float> autoMasterAbTruePeakDeltaDb {0.0f};
+    std::atomic<float> autoMasterAbDynamicsDeltaDb {0.0f};
+    std::atomic<float> autoMasterAbScore {0.0f};
     std::array<std::atomic<float>, fmma::bandCount> bandPercents {};
     std::array<std::atomic<float>, fmma::bandCount> bandCorrelations {};
     std::array<std::atomic<float>, fmma::bandCount> bandSideRatiosDb {};

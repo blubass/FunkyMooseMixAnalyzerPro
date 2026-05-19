@@ -335,12 +335,15 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
                                                        + formatSigned(metrics.autoMasterLufsDeltaDb, "", 1)
                                                        + " / " + formatSigned(metrics.autoMasterTruePeakMarginDb, "", 1)
                                                      : "N/A"},
+        {"AM A/B", metrics.autoMasterEnabled ? juce::String(metrics.autoMasterAbScore, 0) + " / LU "
+                                                + formatSigned(metrics.autoMasterAbLoudnessDeltaDb, "", 1)
+                                                + " / TP " + formatSigned(metrics.autoMasterAbTruePeakDeltaDb, "", 1)
+                                              : "N/A"},
         {"Clip/Worst", juce::String(metrics.clippedPercent, 3) + " / " + juce::String(metrics.worstClippedPercent, 3) + "%"},
         {"TP Margin", hasTruePeak ? formatSigned(truePeakMargin, " dB") : "N/A"},
         {"Worst TP", formatDbTp(metrics.worstTruePeakDb)},
         {"Stream -14", formatDeliveryPreview(-14.0f)},
-        {"Apple -16", formatDeliveryPreview(-16.0f)},
-        {"Broadcast", formatDeliveryPreview(-23.0f)}
+        {"Apple -16", formatDeliveryPreview(-16.0f)}
     };
     qualityData.rowHeight = 11.8f;
     qualityData.barValue = hasTruePeak ? juce::jlimit(0.0f, 1.0f, (truePeakMargin + 1.0f) / 5.0f) : 0.0f;
@@ -539,6 +542,11 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::smoothDisplayMetrics(const fmma:
     metrics.autoMasterLufsDeltaDb = smoothValue(metrics.autoMasterLufsDeltaDb, raw.autoMasterLufsDeltaDb, amount);
     metrics.autoMasterTruePeakMarginDb = smoothValue(metrics.autoMasterTruePeakMarginDb, raw.autoMasterTruePeakMarginDb, amount);
     metrics.autoMasterReleaseScore = smoothValue(metrics.autoMasterReleaseScore, raw.autoMasterReleaseScore, amount);
+    metrics.autoMasterAbLoudnessDeltaDb = smoothValue(metrics.autoMasterAbLoudnessDeltaDb, raw.autoMasterAbLoudnessDeltaDb, amount);
+    metrics.autoMasterAbTruePeakDbTp = smoothAudioDbValue(metrics.autoMasterAbTruePeakDbTp, raw.autoMasterAbTruePeakDbTp);
+    metrics.autoMasterAbTruePeakDeltaDb = smoothValue(metrics.autoMasterAbTruePeakDeltaDb, raw.autoMasterAbTruePeakDeltaDb, amount);
+    metrics.autoMasterAbDynamicsDeltaDb = smoothValue(metrics.autoMasterAbDynamicsDeltaDb, raw.autoMasterAbDynamicsDeltaDb, amount);
+    metrics.autoMasterAbScore = smoothValue(metrics.autoMasterAbScore, raw.autoMasterAbScore, amount);
 
     for (size_t i = 0; i < fmma::bandCount; ++i)
     {
@@ -926,6 +934,15 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
         report << "Auto Master Target Delta: " << formatSigned(sourceMetrics.autoMasterLufsDeltaDb, " dB") << "\n";
         report << "Auto Master True Peak Margin: " << formatSigned(sourceMetrics.autoMasterTruePeakMarginDb, " dB") << "\n";
         report << "Auto Master Release Score: " << juce::String(sourceMetrics.autoMasterReleaseScore, 0) << "/100\n";
+        report << "Auto Master A/B Score: " << juce::String(sourceMetrics.autoMasterAbScore, 0) << "/100\n";
+        report << "Auto Master A/B Loudness Delta: " << formatSigned(sourceMetrics.autoMasterAbLoudnessDeltaDb, " dB") << "\n";
+        report << "Auto Master A/B True Peak: "
+               << (sourceMetrics.autoMasterAbTruePeakDbTp > -119.0f
+                       ? juce::String(sourceMetrics.autoMasterAbTruePeakDbTp, 1) + " dBTP ("
+                         + formatSigned(sourceMetrics.autoMasterAbTruePeakDeltaDb, " dB") + ")"
+                       : "N/A")
+               << "\n";
+        report << "Auto Master A/B Dynamics Delta: " << formatSigned(sourceMetrics.autoMasterAbDynamicsDeltaDb, " dB") << "\n";
     }
     report << "Verdict: " << sourceAssessment.verdictTitle << "\n";
     report << "Mix Score: " << sourceAssessment.overallScore << "/100\n";
@@ -1205,6 +1222,11 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     setJsonProperty(autoMasterJson, "lufsDeltaDb", jsonNumber(sourceMetrics.autoMasterLufsDeltaDb));
     setJsonProperty(autoMasterJson, "truePeakMarginDb", jsonNumber(sourceMetrics.autoMasterTruePeakMarginDb));
     setJsonProperty(autoMasterJson, "releaseScore", jsonNumber(sourceMetrics.autoMasterReleaseScore));
+    setJsonProperty(autoMasterJson, "abLoudnessDeltaDb", jsonNumber(sourceMetrics.autoMasterAbLoudnessDeltaDb));
+    setJsonProperty(autoMasterJson, "abTruePeakDbTp", jsonAudioNumber(sourceMetrics.autoMasterAbTruePeakDbTp));
+    setJsonProperty(autoMasterJson, "abTruePeakDeltaDb", jsonNumber(sourceMetrics.autoMasterAbTruePeakDeltaDb));
+    setJsonProperty(autoMasterJson, "abDynamicsDeltaDb", jsonNumber(sourceMetrics.autoMasterAbDynamicsDeltaDb));
+    setJsonProperty(autoMasterJson, "abScore", jsonNumber(sourceMetrics.autoMasterAbScore));
     setJsonProperty(root, "autoMaster", autoMasterJson);
 
     auto measurements = juce::var { new juce::DynamicObject() };

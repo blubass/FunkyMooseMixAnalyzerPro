@@ -719,6 +719,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::resetAutoMasterState() noexcept
     autoMasterWidthPercent.store(100.0f, std::memory_order_relaxed);
     autoMasterGlueReductionDb.store(0.0f, std::memory_order_relaxed);
     autoMasterLimiterReductionDb.store(0.0f, std::memory_order_relaxed);
+    autoMasterProjectedLufs.store(-120.0f, std::memory_order_relaxed);
+    autoMasterProjectedTruePeakDbTp.store(-120.0f, std::memory_order_relaxed);
+    autoMasterLoudnessMatchGainDb.store(0.0f, std::memory_order_relaxed);
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<float>& buffer,
@@ -1017,6 +1020,21 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
 
     autoMasterGlueReductionDb.store(displayedAutoMasterGlueReductionDb, std::memory_order_relaxed);
     autoMasterLimiterReductionDb.store(displayedAutoMasterLimiterReductionDb, std::memory_order_relaxed);
+
+    const auto projectedLufs = hasLoudness
+        ? juce::jlimit(-120.0f, 24.0f, metrics.integratedLufs + smoothedAutoMasterGainDb)
+        : -120.0f;
+    const auto projectedTruePeak = hasTruePeak
+        ? juce::jmin(autoMasterDefaultCeilingDbTp,
+                     truePeakForSafety
+                        + smoothedAutoMasterGainDb
+                        - displayedAutoMasterGlueReductionDb
+                        - displayedAutoMasterLimiterReductionDb)
+        : -120.0f;
+    autoMasterProjectedLufs.store(projectedLufs, std::memory_order_relaxed);
+    autoMasterProjectedTruePeakDbTp.store(projectedTruePeak, std::memory_order_relaxed);
+    autoMasterLoudnessMatchGainDb.store(hasLoudness ? -smoothedAutoMasterGainDb : 0.0f,
+                                        std::memory_order_relaxed);
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::timerCallback()
@@ -1813,6 +1831,9 @@ fmma::AnalyzerMetrics FunkyMooseMixAnalyzerAudioProcessor::getMetrics() const
     metrics.autoMasterWidthPercent = autoMasterWidthPercent.load(std::memory_order_relaxed);
     metrics.autoMasterGlueReductionDb = autoMasterGlueReductionDb.load(std::memory_order_relaxed);
     metrics.autoMasterLimiterReductionDb = autoMasterLimiterReductionDb.load(std::memory_order_relaxed);
+    metrics.autoMasterProjectedLufs = autoMasterProjectedLufs.load(std::memory_order_relaxed);
+    metrics.autoMasterProjectedTruePeakDbTp = autoMasterProjectedTruePeakDbTp.load(std::memory_order_relaxed);
+    metrics.autoMasterLoudnessMatchGainDb = autoMasterLoudnessMatchGainDb.load(std::memory_order_relaxed);
 
     for (auto band = 0; band < fmma::bandCount; ++band)
     {

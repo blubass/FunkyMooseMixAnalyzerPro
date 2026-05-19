@@ -74,6 +74,7 @@ class PluginBridge:
         # release gate score / ready -> 33, 34
         # auto master enabled, strength, target, ceiling, gain, low, presence, air, width, limiter GR -> 35..44
         # auto master glue GR -> 45
+        # auto master projected LUFS, projected TP, loudness-match gain -> 46, 47, 48
 
         if len(args) < 27:
             return
@@ -108,6 +109,9 @@ class PluginBridge:
                 "widthPercent": float(args[43]),
                 "limiterReductionDb": float(args[44]),
                 "glueReductionDb": float(args[45]) if len(args) >= 46 else 0.0,
+                "projectedLufs": float(args[46]) if len(args) >= 47 else None,
+                "projectedTruePeakDbTp": float(args[47]) if len(args) >= 48 else None,
+                "loudnessMatchGainDb": float(args[48]) if len(args) >= 49 else 0.0,
             }
 
         with self.lock:

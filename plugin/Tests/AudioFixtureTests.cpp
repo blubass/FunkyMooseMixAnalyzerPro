@@ -620,12 +620,21 @@ void autoMasterRaisesQuietProgramMaterial()
 {
     const auto source = makeStereoSine(30.0f, 1000.0f, juce::Decibels::decibelsToGain(-26.0f));
     const auto rendered = renderFixture(source, true);
+    const auto metrics = renderFixtureMetrics(source, true);
     const auto tailStart = static_cast<int>(24.0 * testSampleRate);
     const auto inputTailPeak = bufferPeak(source, tailStart);
     const auto outputTailPeak = bufferPeak(rendered, tailStart);
 
     expect(outputTailPeak > inputTailPeak * 1.35f,
            "auto-master should raise quiet material after enough evidence");
+    expect(metrics.autoMasterProjectedLufs > metrics.integratedLufs,
+           "auto-master should estimate a louder mastered LUFS value when it raises quiet material");
+    expect(metrics.autoMasterProjectedTruePeakDbTp <= -0.95f,
+           "auto-master projected true peak should respect the output ceiling");
+    expectNear(metrics.autoMasterLoudnessMatchGainDb,
+               -metrics.autoMasterGainDb,
+               0.05f,
+               "auto-master loudness-match gain should invert the applied loudness gain");
 }
 
 void autoMasterReducesHotProgramMaterial()

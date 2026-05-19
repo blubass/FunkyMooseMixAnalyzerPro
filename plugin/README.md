@@ -5,7 +5,7 @@ This is the first native plugin companion for Funky Moose Mix Analyzer. It is a 
 ## What works now
 
 - Audio is passed through unchanged unless Auto Master is explicitly enabled.
-- Optional Auto Master applies conservative genre-aware loudness gain, low/presence/air tone shaping, stereo safety, adaptive glue compression, and a -1.0 dBTP output guard.
+- Optional Auto Master applies conservative genre-aware loudness gain, low/presence/air tone shaping, stereo safety, adaptive glue compression, loudness-match preview metering, and a -1.0 dBTP output guard.
 - Live Momentary, Short-Term, and Integrated LUFS are measured with K-weighting and gated integrated loudness.
 - True Peak is measured with 4x oversampling.
 - RMS, sample peak, crest factor, L/R peaks, mono-sum peak, mono RMS/loss, stereo correlation, M/S width, L/R balance, DC offset, and six-band balance are measured in real time.
@@ -21,7 +21,7 @@ This is the first native plugin companion for Funky Moose Mix Analyzer. It is a 
 - Low-end scoring distinguishes sub, bass, and low-mid buildup instead of judging only total low-end energy.
 - Tone scoring distinguishes air, dullness, harsh presence, sibilance-zone resonance, and vocal presence masking.
 - Reference comparison contributes its own action note when the current mix drifts meaningfully from the captured reference.
-- Copy report now includes a Mix Doctor Summary, worst-case holds, Auto Master moves and gain reduction, delivery preview, reference/A-B notes, and band-phase readouts.
+- Copy report now includes a Mix Doctor Summary, worst-case holds, Auto Master moves, gain reduction, loudness-match preview, delivery preview, reference/A-B notes, and band-phase readouts.
 - Copy JSON exports the same pass as a stable machine-readable report for desktop-app import, support notes, or session archiving.
 - The top measured priority actions are severity-ranked and include measured values where useful, so hard blockers such as clipping, True Peak, mono loss, phase, translation, and confidence issues surface before polish moves.
 - Captured references and A/B snapshots are stored in the plugin state so DAW projects can restore them with the session.

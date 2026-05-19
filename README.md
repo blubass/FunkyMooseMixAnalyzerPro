@@ -119,7 +119,7 @@ The plugin exposes the following metrics via `getMetrics()`:
 - **Stereo**: correlation, phaseCorrelation, msRatioDb
 - **Spectrum**: spectralCentroidHz, resonanceFreqHz
 - **Bands**: bandPercents, bandCorrelations
-- **Auto Master**: optional off-by-default processing with strength, target LUFS, ceiling, gain, tone-shaping, stereo width, glue-compression, and limiter-reduction readouts
+- **Auto Master**: optional off-by-default processing with strength, target LUFS, ceiling, gain, tone-shaping, stereo width, glue-compression, limiter-reduction, and loudness-match preview readouts
 
 For full API details, see `PluginProcessor.h`.
 

@@ -226,6 +226,9 @@ private:
     std::atomic<float> autoMasterWidthPercent {100.0f};
     std::atomic<float> autoMasterGlueReductionDb {0.0f};
     std::atomic<float> autoMasterLimiterReductionDb {0.0f};
+    std::atomic<float> autoMasterProjectedLufs {-120.0f};
+    std::atomic<float> autoMasterProjectedTruePeakDbTp {-120.0f};
+    std::atomic<float> autoMasterLoudnessMatchGainDb {0.0f};
     std::array<std::atomic<float>, fmma::bandCount> bandPercents {};
     std::array<std::atomic<float>, fmma::bandCount> bandCorrelations {};
     std::array<std::atomic<float>, fmma::bandCount> bandSideRatiosDb {};

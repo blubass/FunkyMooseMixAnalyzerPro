@@ -321,7 +321,9 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
         {"AM Target", metrics.autoMasterEnabled ? juce::String(metrics.autoMasterTargetLufs, 0) + " LUFS / "
                                                   + juce::String(metrics.autoMasterCeilingDbTp, 1) + " dBTP"
                                                 : "N/A"},
-        {"AM Gain", metrics.autoMasterEnabled ? formatSigned(metrics.autoMasterGainDb, " dB") : "N/A"},
+        {"AM Gain/Match", metrics.autoMasterEnabled ? formatSigned(metrics.autoMasterGainDb, " dB")
+                                                       + " / " + formatSigned(metrics.autoMasterLoudnessMatchGainDb, " dB")
+                                                     : "N/A"},
         {"AM Tone", metrics.autoMasterEnabled ? "L " + formatSigned(metrics.autoMasterLowShelfDb, " dB", 1)
                                                 + " / P " + formatSigned(metrics.autoMasterPresenceDb, " dB", 1)
                                                 + " / A " + formatSigned(metrics.autoMasterAirShelfDb, " dB", 1)
@@ -524,6 +526,13 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::smoothDisplayMetrics(const fmma:
     metrics.autoMasterWidthPercent = smoothValue(metrics.autoMasterWidthPercent, raw.autoMasterWidthPercent, amount);
     metrics.autoMasterGlueReductionDb = smoothValue(metrics.autoMasterGlueReductionDb, raw.autoMasterGlueReductionDb, amount);
     metrics.autoMasterLimiterReductionDb = smoothValue(metrics.autoMasterLimiterReductionDb, raw.autoMasterLimiterReductionDb, amount);
+    const auto smoothAudioDbValue = [amount] (float current, float next)
+    {
+        return (current <= -119.0f || next <= -119.0f) ? next : smoothValue(current, next, amount);
+    };
+    metrics.autoMasterProjectedLufs = smoothAudioDbValue(metrics.autoMasterProjectedLufs, raw.autoMasterProjectedLufs);
+    metrics.autoMasterProjectedTruePeakDbTp = smoothAudioDbValue(metrics.autoMasterProjectedTruePeakDbTp, raw.autoMasterProjectedTruePeakDbTp);
+    metrics.autoMasterLoudnessMatchGainDb = smoothValue(metrics.autoMasterLoudnessMatchGainDb, raw.autoMasterLoudnessMatchGainDb, amount);
 
     for (size_t i = 0; i < fmma::bandCount; ++i)
     {
@@ -900,6 +909,14 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
                << ", width " << juce::String(sourceMetrics.autoMasterWidthPercent, 0) << "%\n";
         report << "Auto Master Glue GR: " << juce::String(sourceMetrics.autoMasterGlueReductionDb, 1) << " dB\n";
         report << "Auto Master Limiter GR: " << juce::String(sourceMetrics.autoMasterLimiterReductionDb, 1) << " dB\n";
+        report << "Auto Master Projected LUFS: "
+               << (sourceMetrics.autoMasterProjectedLufs > -119.0f ? juce::String(sourceMetrics.autoMasterProjectedLufs, 1) : "N/A") << "\n";
+        report << "Auto Master Projected True Peak: "
+               << (sourceMetrics.autoMasterProjectedTruePeakDbTp > -119.0f
+                       ? juce::String(sourceMetrics.autoMasterProjectedTruePeakDbTp, 1) + " dBTP"
+                       : "N/A")
+               << "\n";
+        report << "Auto Master Loudness-Match Gain: " << formatSigned(sourceMetrics.autoMasterLoudnessMatchGainDb, " dB") << "\n";
     }
     report << "Verdict: " << sourceAssessment.verdictTitle << "\n";
     report << "Mix Score: " << sourceAssessment.overallScore << "/100\n";
@@ -1173,6 +1190,9 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     setJsonProperty(autoMasterJson, "widthPercent", jsonNumber(sourceMetrics.autoMasterWidthPercent));
     setJsonProperty(autoMasterJson, "glueReductionDb", jsonNumber(sourceMetrics.autoMasterGlueReductionDb));
     setJsonProperty(autoMasterJson, "limiterReductionDb", jsonNumber(sourceMetrics.autoMasterLimiterReductionDb));
+    setJsonProperty(autoMasterJson, "projectedLufs", jsonAudioNumber(sourceMetrics.autoMasterProjectedLufs));
+    setJsonProperty(autoMasterJson, "projectedTruePeakDbTp", jsonAudioNumber(sourceMetrics.autoMasterProjectedTruePeakDbTp));
+    setJsonProperty(autoMasterJson, "loudnessMatchGainDb", jsonNumber(sourceMetrics.autoMasterLoudnessMatchGainDb));
     setJsonProperty(root, "autoMaster", autoMasterJson);
 
     auto measurements = juce::var { new juce::DynamicObject() };

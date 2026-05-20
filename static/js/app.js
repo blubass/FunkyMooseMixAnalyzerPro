@@ -158,7 +158,8 @@ const i18n = {
         'Electronic': 'Electronic / Club',
         'Cinematic': 'Cinematic / Score',
         'Spoken & Media': 'Sprache & Medien',
-        'General': 'Allgemein'
+        'General': 'Allgemein',
+        'welcome-tip': '<strong>Tipp:</strong> Fahre mit der Maus über die [?] Icons neben den Metriken, um zu erfahren, was sie bedeuten!'
     },
     en: {
         subtitle: 'Audio Intelligence Dashboard - by Uwe Arthur Felchle',
@@ -280,7 +281,8 @@ const i18n = {
         'Electronic': 'Electronic / Club',
         'Cinematic': 'Cinematic / Score',
         'Spoken & Media': 'Spoken & Media',
-        'General': 'General'
+        'General': 'General',
+        'welcome-tip': '<strong>Tip:</strong> Hover over the [?] icons next to the metrics to learn what they mean!'
     }
 };
 
@@ -314,8 +316,59 @@ const genreI18n = {
     }
 };
 
+const tooltipsI18n = {
+    de: {
+        'rms': 'Die durchschnittliche Lautstärke des Audiosignals über Zeit. Niedrige Werte bedeuten mehr Headroom.',
+        'peak': 'Der höchste absolute Pegel im digitalen Signal. Darf 0 dBFS nicht überschreiten, um Clipping zu vermeiden.',
+        'crest': 'Crest-Faktor: Differenz zwischen Peak und RMS. Hohe Werte (>10 dB) klingen dynamisch, sehr niedrige (<6 dB) oft flach.',
+        'correlation': 'Phasenkorrelation (+1 bis -1). +1 ist perfektes Mono, 0 ist super breit, Werte unter 0 löschen sich in Mono aus.',
+        'width': 'Stereobreite: Prozentsatz des Signals, der im Seitensignal (Side) statt in der Mitte (Mid) liegt.',
+        'ms-ratio': 'Das Lautstärkeverhältnis zwischen Mid (Mono) und Side (Stereo). Zu viel Side zerstört die Monokompatibilität.',
+        'stereo-balance': 'Zeigt an, ob der Mix eher nach links oder rechts neigt. Ein Wert nahe 0 dB ist ideal.',
+        'lra': 'Loudness Range (LRA): Die Makrodynamik deines Tracks. Beschreibt den Lautstärkeunterschied zwischen den leisesten und lautesten Passagen.',
+        'target-match': 'Wie gut deine integrierte Lautheit (LUFS) zum Zielwert des gewählten Genres passt.',
+        'clipping': 'Prozentsatz der Samples, die über 0 dBFS clippen (verzerren). Sollte im besten Fall 0% sein.',
+        'dc-offset': 'Gleichspannungsversatz. Ein Wert ungleich 0 klaut dir Headroom und kann Knackser verursachen.',
+        'transient-density': 'Anzahl der erkannten Transienten (Einsätze) pro Sekunde. Gibt an, wie rhythmisch dicht der Mix ist.',
+        'attack-time': 'Durchschnittliche Attack-Zeit. Kurze Zeiten (z.B. < 10ms) bedeuten sehr punchy Drums.',
+        'perc-energy': 'Prozentualer Anteil der perkussiven Energie am Gesamtsignal.',
+        'mono-compat': 'Wie gut der Track klingt, wenn er auf einem reinen Mono-Lautsprecher (z.B. Handy) abgespielt wird.',
+        'phase-quality': 'Stabilität der Phase zwischen linkem und rechtem Kanal. Wichtig für Club-Anlagen.',
+        'true-peak': 'True Peak: Zeigt Intersample-Peaks an, die erst nach der D/A-Wandlung entstehen. Für Streaming oft < -1.0 dBTP empfohlen.'
+    },
+    en: {
+        'rms': 'The average perceived loudness over time. Lower values mean more headroom.',
+        'peak': 'The highest absolute level in the digital signal. Must not exceed 0 dBFS to prevent clipping.',
+        'crest': 'Crest Factor: Difference between Peak and RMS. High values (>10 dB) are dynamic, low values (<6 dB) often sound squashed.',
+        'correlation': 'Phase Correlation (+1 to -1). +1 is perfect mono, 0 is super wide, values below 0 will cancel out in mono.',
+        'width': 'Stereo Width: Percentage of the signal residing in the Side channel rather than the Mid channel.',
+        'ms-ratio': 'Volume ratio between Mid (Mono) and Side (Stereo). Too much Side ruins mono compatibility.',
+        'stereo-balance': 'Indicates if the mix leans left or right. A value near 0 dB is ideal.',
+        'lra': 'Loudness Range (LRA): The macro-dynamics of your track. Describes the volume difference between quietest and loudest parts.',
+        'target-match': 'How well your Integrated Loudness (LUFS) matches the target for the selected genre.',
+        'clipping': 'Percentage of samples clipping above 0 dBFS. Should ideally be 0%.',
+        'dc-offset': 'Direct Current offset. A non-zero value steals headroom and can cause clicks.',
+        'transient-density': 'Number of detected transients (onsets) per second. Indicates rhythmic density.',
+        'attack-time': 'Average attack time. Short times (e.g. < 10ms) mean very punchy drums.',
+        'perc-energy': 'Percentage of percussive energy in the total signal.',
+        'mono-compat': 'How well the track translates when played back on a pure mono speaker (e.g. a smartphone).',
+        'phase-quality': 'Stability of the phase between left and right channels. Critical for club systems.',
+        'true-peak': 'True Peak: Shows intersample peaks that occur after D/A conversion. For streaming, < -1.0 dBTP is recommended.'
+    }
+};
+
 function t(key) {
     return (i18n[currentLang] && i18n[currentLang][key]) || key;
+}
+
+function tt(key) {
+    return (tooltipsI18n[currentLang] && tooltipsI18n[currentLang][key]) || '';
+}
+
+function tooltip(key) {
+    const text = tt(key);
+    if (!text) return '';
+    return `<span class="metric-tooltip"><i class="fa-solid fa-circle-question"></i><span class="tooltip-text">${escapeHtml(text)}</span></span>`;
 }
 
 function bandLabel(name) {
@@ -447,6 +500,9 @@ function updateTexts() {
     if (masteringTitle) masteringTitle.textContent = t('mastering-title');
     const masteringSub = document.getElementById('masteringSubEl');
     if (masteringSub) masteringSub.textContent = t('mastering-sub');
+    
+    const welcomeMsg = document.getElementById('welcomeTextMsg');
+    if (welcomeMsg) welcomeMsg.innerHTML = t('welcome-tip');
 
     const compOpt = els.compareSelect.querySelector('option[value=""]');
     if (compOpt) compOpt.textContent = t('compare-placeholder');
@@ -1281,21 +1337,21 @@ function renderSlice(slice) {
 
             <div class="card">
                 <h3><i class="fa-solid fa-bolt"></i> ${t('dyn')}</h3>
-                <div class="metric-row"><span class="metric-label">${t('rms')}</span><span class="metric-value">${fmt(slice.rms_db, ' dBFS')}</span></div>
-                <div class="metric-row"><span class="metric-label">${t('peak')}</span><span class="metric-value">${fmt(slice.peak_db, ' dBFS')}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('rms')}${tooltip('rms')}</span><span class="metric-value">${fmt(slice.rms_db, ' dBFS')}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('peak')}${tooltip('peak')}</span><span class="metric-value">${fmt(slice.peak_db, ' dBFS')}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('left-peak')}</span><span class="metric-value">${fmt(leftLevels.peak_db, ' dBFS')}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('right-peak')}</span><span class="metric-value">${fmt(rightLevels.peak_db, ' dBFS')}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('mono-peak')}</span><span class="metric-value">${fmt(monoLevels.peak_db, ' dBFS')}</span></div>
-                <div class="metric-row"><span class="metric-label">${t('crest')}</span><span class="metric-value">${fmt(slice.crest_db, ' dB')}</span></div>
-                <div class="metric-row"><span class="metric-label">True Peak</span><span class="metric-value">${fmt(slice.TP, ' dBTP')}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('crest')}${tooltip('crest')}</span><span class="metric-value">${fmt(slice.crest_db, ' dB')}</span></div>
+                <div class="metric-row"><span class="metric-label">True Peak${tooltip('true-peak')}</span><span class="metric-value">${fmt(slice.TP, ' dBTP')}</span></div>
             </div>
 
             <div class="card">
                 <h3><i class="fa-solid fa-arrows-left-right"></i> ${t('stereo')}</h3>
-                <div class="metric-row"><span class="metric-label">${t('correlation')}</span><span class="metric-value" style="color: ${metricTone(slice.correlation, 'correlation')}">${fmt(slice.correlation, '')}</span></div>
-                <div class="metric-row"><span class="metric-label">${t('width')}</span><span class="metric-value">${fmt(slice.mid_side ? slice.mid_side.width_pct : 0, '%', 1)}</span></div>
-                <div class="metric-row"><span class="metric-label">${t('ms-ratio')}</span><span class="metric-value">${fmt(slice.mid_side ? slice.mid_side.ms_ratio_db : 0, ' dB', 1)}</span></div>
-                <div class="metric-row"><span class="metric-label">${t('stereo-balance')}</span><span class="metric-value">${fmt(quality.stereo_balance_db, ' dB', 2)}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('correlation')}${tooltip('correlation')}</span><span class="metric-value" style="color: ${metricTone(slice.correlation, 'correlation')}">${fmt(slice.correlation, '')}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('width')}${tooltip('width')}</span><span class="metric-value">${fmt(slice.mid_side ? slice.mid_side.width_pct : 0, '%', 1)}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('ms-ratio')}${tooltip('ms-ratio')}</span><span class="metric-value">${fmt(slice.mid_side ? slice.mid_side.ms_ratio_db : 0, ' dB', 1)}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('stereo-balance')}${tooltip('stereo-balance')}</span><span class="metric-value">${fmt(quality.stereo_balance_db, ' dB', 2)}</span></div>
                 <div class="correlation-meter">
                     <span style="left: ${marker}%"></span>
                 </div>
@@ -1305,16 +1361,16 @@ function renderSlice(slice) {
             <div class="card">
                 <h3><i class="fa-solid fa-volume-high"></i> ${t('lufs-title')}</h3>
                 <div class="metric-row"><span class="metric-label">Integrated (I)</span><span class="metric-value" style="color: ${metricTone(slice.I, 'lufs')}">${fmt(slice.I, ' LUFS')}</span></div>
-                <div class="metric-row"><span class="metric-label">${t('lra')}</span><span class="metric-value">${fmt(slice.LRA, ' LU')}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('lra')}${tooltip('lra')}</span><span class="metric-value">${fmt(slice.LRA, ' LU')}</span></div>
                 <div class="metric-row"><span class="metric-label">Sample Peak</span><span class="metric-value">${fmt(slice.SP, ' dBFS')}</span></div>
-                <div class="metric-row"><span class="metric-label">${t('target-match')}</span><span class="metric-value">${targetMatch ? t('excellent') : t('needs-adj')}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('target-match')}${tooltip('target-match')}</span><span class="metric-value">${targetMatch ? t('excellent') : t('needs-adj')}</span></div>
             </div>
 
             <div class="card">
                 <h3><i class="fa-solid fa-shield-halved"></i> ${t('quality-title')}</h3>
-                <div class="metric-row"><span class="metric-label">${t('clipping')}</span><span class="metric-value">${fmt(quality.clipped_percent, '%', 3)}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('clipping')}${tooltip('clipping')}</span><span class="metric-value">${fmt(quality.clipped_percent, '%', 3)}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('silence')}</span><span class="metric-value">${fmt(quality.silence_percent, '%', 1)}</span></div>
-                <div class="metric-row"><span class="metric-label">${t('dc-offset')}</span><span class="metric-value">${fmt(quality.dc_offset, '', 5)}</span></div>
+                <div class="metric-row"><span class="metric-label">${t('dc-offset')}${tooltip('dc-offset')}</span><span class="metric-value">${fmt(quality.dc_offset, '', 5)}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('centroid')}</span><span class="metric-value">${fmt(quality.spectral_centroid_hz, ' Hz', 0)}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('rolloff')}</span><span class="metric-value">${fmt(quality.spectral_rolloff_hz, ' Hz', 0)}</span></div>
                 <div class="metric-row"><span class="metric-label">${t('loudness-method')}</span><span class="metric-value compact">${escapeHtml(slice.loudness_method || 'N/A')}</span></div>
@@ -1333,12 +1389,13 @@ function renderSlice(slice) {
                     const apct  = attack  == null ? 0 : Math.min(100, (1 - Math.max(0, attack - 4) / 76) * 100);
                     const ppct  = perc    == null ? 0 : Math.min(100, perc);
                     return `
-                        <div class="metric-row"><span class="metric-label">${t('transient-density')}</span><span class="metric-value" style="color:${dc}">${density != null ? density.toFixed(1) : 'N/A'}</span></div>
+                        <div class="metric-row"><span class="metric-label">${t('transient-density')}${tooltip('transient-density')}</span><span class="metric-value" style="color:${dc}">${density != null ? density.toFixed(1) : 'N/A'}</span></div>
                         <div class="band-meter" style="margin:-6px 0 12px"><span style="width:${dpct}%;background:${dc}"></span></div>
-                        <div class="metric-row"><span class="metric-label">${t('attack-time')}</span><span class="metric-value" style="color:${ac}">${attack != null ? attack.toFixed(0)+' ms' : 'N/A'}</span></div>
+                        <div class="metric-row"><span class="metric-label">${t('attack-time')}${tooltip('attack-time')}</span><span class="metric-value" style="color:${ac}">${attack != null ? attack.toFixed(0)+' ms' : 'N/A'}</span></div>
                         <div class="band-meter" style="margin:-6px 0 12px"><span style="width:${apct}%;background:${ac}"></span></div>
-                        <div class="metric-row"><span class="metric-label">${t('perc-energy')}</span><span class="metric-value">${perc != null ? perc.toFixed(1)+'%' : 'N/A'}</span></div>
+                        <div class="metric-row"><span class="metric-label">${t('perc-energy')}${tooltip('perc-energy')}</span><span class="metric-value">${perc != null ? perc.toFixed(1)+'%' : 'N/A'}</span></div>
                         <div class="band-meter" style="margin:-6px 0 0"><span style="width:${ppct}%"></span></div>`;
+
                 })()}
             </div>
 
@@ -1375,8 +1432,8 @@ function renderSlice(slice) {
                             ${scoreRingHtml('hp', 'hp', sc.headphone, t('headphone-score'))}
                             ${scoreRingHtml('sp', 'sp', sc.speaker, t('speaker-score'))}
                             <div class="score-detail">
-                                <div class="metric-row"><span class="metric-label">${t('mono-compat')}</span><span class="metric-value">${sc.monoCompat}%</span></div>
-                                <div class="metric-row"><span class="metric-label">${t('phase-quality')}</span><span class="metric-value">${sc.phaseQuality}%</span></div>
+                                <div class="metric-row"><span class="metric-label">${t('mono-compat')}${tooltip('mono-compat')}</span><span class="metric-value">${sc.monoCompat}%</span></div>
+                                <div class="metric-row"><span class="metric-label">${t('phase-quality')}${tooltip('phase-quality')}</span><span class="metric-value">${sc.phaseQuality}%</span></div>
                                 <div class="metric-row"><span class="metric-label">${t('track-type')}</span><span class="metric-value"><span class="vocal-badge ${badgeClass}"><i class="fa-solid ${badgeIcon}"></i>${badgeText}</span></span></div>
                             </div>
                         </div>`;
@@ -1831,6 +1888,23 @@ async function checkSystem() {
 
 // Initial System Check
 checkSystem();
+
+// First-Run Welcome Banner Check
+function checkFirstRun() {
+    const welcomeBanner = document.getElementById('welcomeBanner');
+    const closeWelcomeBtn = document.getElementById('closeWelcomeBtn');
+    if (!welcomeBanner || !closeWelcomeBtn) return;
+    
+    if (!localStorage.getItem('fmma_welcome_seen')) {
+        welcomeBanner.classList.remove('hidden');
+        
+        closeWelcomeBtn.addEventListener('click', () => {
+            welcomeBanner.classList.add('hidden');
+            localStorage.setItem('fmma_welcome_seen', 'true');
+        });
+    }
+}
+checkFirstRun();
 
 // --- Live Plugin Monitor ---
 const LiveMonitor = {

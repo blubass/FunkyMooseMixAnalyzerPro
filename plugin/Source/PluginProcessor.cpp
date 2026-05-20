@@ -1305,8 +1305,11 @@ void FunkyMooseMixAnalyzerAudioProcessor::timerCallback()
     input.instrumental = instrumental;
     
     const auto assessment = fmma::assessMix(input, profile);
+    fmma::AnalyzerMetrics storedReference;
+    const auto hasStoredReference = getStoredReferenceMetrics(storedReference);
+    const auto targetMatch = fmma::assessTargetMatch(input, profile, hasStoredReference ? &storedReference : nullptr);
     
-    oscSender.send(m, assessment);
+    oscSender.send(m, assessment, targetMatch);
 }
 
 fmma::MixAssessmentInput FunkyMooseMixAnalyzerAudioProcessor::makeAssessmentInput() const

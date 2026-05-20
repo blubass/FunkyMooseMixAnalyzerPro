@@ -28,7 +28,8 @@ public:
 
     /** Send all relevant fields of metrics as a single OSC message. */
     void send(const fmma::AnalyzerMetrics& metrics,
-              const fmma::MixAssessment& assessment);
+              const fmma::MixAssessment& assessment,
+              const fmma::TargetMatch& targetMatch);
 
 private:
     juce::OSCSender sender;

@@ -13,15 +13,16 @@ This is the first native plugin companion for Funky Moose Mix Analyzer. It is a 
 - Full-pass worst-case holds track peak, clipping, correlation, mono loss, low-mid buildup, and resonance, so final judgements are not based only on the last playback block.
 - Per-band phase/correlation and side-energy are measured for frequency-specific stereo safety, including dedicated low-end mono safety checks.
 - The full standalone genre profile list is available, including target LUFS, crest, low-end, presence, and correlation thresholds.
-- A native editor shows Mix Score, confidence, verdict, target checks, safety/delivery preview, tone shape, Auto Master state, Match A/B audition, safety-governor risk/recommended strength, reference comparison, A/B snapshots, Instrumental mode, Reset, Clear Reference, Clear A/B, and Copy DAW notes.
+- A native editor shows Mix Score, confidence, verdict, target checks, safety/delivery preview, tone shape, Auto Master state, Match A/B audition, safety-governor risk/recommended strength, target-match/reference comparison, A/B snapshots, Instrumental mode, Reset, Clear Reference, Clear A/B, and Copy DAW notes.
 - Host playback can automatically run a pass: playback start begins measurement and playback stop freezes the pass.
 - Delivery preview estimates streaming, Apple, and broadcast normalization gain with resulting True Peak.
 - Delivery risk is also considered in priority actions when normalization would push True Peak too high.
 - LRA/macrodynamics are scored separately with genre-aware targets, so flat masters and overly jumpy sections are flagged.
 - Low-end scoring distinguishes sub, bass, and low-mid buildup instead of judging only total low-end energy.
 - Tone scoring distinguishes air, dullness, harsh presence, sibilance-zone resonance, and vocal presence masking.
+- Target Match scores the current pass against the selected genre profile or captured reference with loudness, tone, dynamics, stereo sub-scores and a concrete next move.
 - Reference comparison contributes its own action note when the current mix drifts meaningfully from the captured reference.
-- Copy report now includes a Mix Doctor Summary, worst-case holds, Auto Master moves, gain reduction, loudness-match preview, equal-loudness A/B audition state, equal-loudness A/B judgement, safety-governor recommendation, release-score check, delivery preview, reference/A-B notes, and band-phase readouts.
+- Copy report now includes a Mix Doctor Summary, worst-case holds, Auto Master moves, gain reduction, loudness-match preview, equal-loudness A/B audition state, equal-loudness A/B judgement, safety-governor recommendation, release-score check, target-match judgement, delivery preview, reference/A-B notes, and band-phase readouts.
 - Copy JSON exports the same pass as a stable machine-readable report for desktop-app import, support notes, or session archiving.
 - The top measured priority actions are severity-ranked and include measured values where useful, so hard blockers such as clipping, True Peak, mono loss, phase, translation, and confidence issues surface before polish moves.
 - Captured references and A/B snapshots are stored in the plugin state so DAW projects can restore them with the session.

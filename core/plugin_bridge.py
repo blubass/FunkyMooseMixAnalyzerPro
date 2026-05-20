@@ -79,6 +79,9 @@ class PluginBridge:
         # auto master A/B loudness delta, matched TP, TP delta, dynamics delta, score -> 52..56
         # auto master audition enabled, gain, loudness delta, true peak -> 57..60
         # auto master governor risk, recommended strength, strength trim -> 61..63
+        # target match score, loudness, tone, dynamics, stereo, reference flag -> 64..69
+        # target match deltas LUFS, low, presence, crest, width, correlation -> 70..75
+        # target match mode, action -> 76..77
 
         if len(args) < 27:
             return
@@ -132,6 +135,24 @@ class PluginBridge:
                 "recommendedStrengthPercent": float(args[62]) if len(args) >= 63 else 0.0,
                 "strengthTrimPercent": float(args[63]) if len(args) >= 64 else 0.0,
             }
+        target_match = None
+        if len(args) >= 78:
+            target_match = {
+                "score": int(args[64]),
+                "loudnessScore": int(args[65]),
+                "tonalScore": int(args[66]),
+                "dynamicsScore": int(args[67]),
+                "stereoScore": int(args[68]),
+                "referenceUsed": bool(args[69]),
+                "lufsDelta": float(args[70]),
+                "lowEndDeltaPercent": float(args[71]),
+                "presenceDeltaPercent": float(args[72]),
+                "crestDeltaDb": float(args[73]),
+                "widthDeltaPercent": float(args[74]),
+                "correlationDelta": float(args[75]),
+                "mode": str(args[76]),
+                "action": str(args[77]),
+            }
 
         with self.lock:
             self.metrics = {
@@ -172,7 +193,8 @@ class PluginBridge:
                     "duration": args[25],
                     "completed": bool(args[26])
                 },
-                "autoMaster": auto_master
+                "autoMaster": auto_master,
+                "targetMatch": target_match,
             }
             self.last_update = time.time()
 

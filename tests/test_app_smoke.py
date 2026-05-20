@@ -110,6 +110,9 @@ class AppSmokeTest(unittest.TestCase):
             0.0, -3.5, -1.7, -1.7, 78.0,
             1, -2.5, 0.0, -3.5,
             12.0, 100.0, 0.0,
+            86, 92, 84, 88, 80, 1,
+            -0.4, 2.5, -1.2, 0.8, -6.0, 0.05,
+            "Reference + Genre", "Target Match: keep moves subtle.",
         ]
 
         bridge._handle_metrics("/fmma/metrics", *args)
@@ -142,6 +145,12 @@ class AppSmokeTest(unittest.TestCase):
         self.assertEqual(metrics["autoMaster"]["governorRiskScore"], 12.0)
         self.assertEqual(metrics["autoMaster"]["recommendedStrengthPercent"], 100.0)
         self.assertEqual(metrics["autoMaster"]["strengthTrimPercent"], 0.0)
+        self.assertEqual(metrics["targetMatch"]["score"], 86)
+        self.assertEqual(metrics["targetMatch"]["tonalScore"], 84)
+        self.assertTrue(metrics["targetMatch"]["referenceUsed"])
+        self.assertEqual(metrics["targetMatch"]["lufsDelta"], -0.4)
+        self.assertEqual(metrics["targetMatch"]["mode"], "Reference + Genre")
+        self.assertIn("Target Match", metrics["targetMatch"]["action"])
 
     def test_plugin_bridge_defaults_worst_clipping_for_older_messages(self):
         bridge = PluginBridge()
@@ -161,6 +170,7 @@ class AppSmokeTest(unittest.TestCase):
         self.assertIsNone(metrics["assessment"]["confidenceDomains"])
         self.assertIsNone(metrics["assessment"]["releaseGate"])
         self.assertIsNone(metrics["autoMaster"])
+        self.assertIsNone(metrics["targetMatch"])
 
     def test_summary_uses_profile_ranges_and_confidence(self):
         slices = [{

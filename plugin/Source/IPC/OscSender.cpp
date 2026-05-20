@@ -19,7 +19,8 @@ void OscSender::disconnect()
 }
 
 void OscSender::send(const fmma::AnalyzerMetrics& m,
-                     const fmma::MixAssessment& a)
+                     const fmma::MixAssessment& a,
+                     const fmma::TargetMatch& t)
 {
     if (! connected)
         return;
@@ -101,6 +102,20 @@ void OscSender::send(const fmma::AnalyzerMetrics& m,
     msg.addFloat32(m.autoMasterGovernorRiskScore);
     msg.addFloat32(m.autoMasterRecommendedStrength);
     msg.addFloat32(m.autoMasterStrengthTrim);
+    msg.addInt32(t.score);
+    msg.addInt32(t.loudnessScore);
+    msg.addInt32(t.tonalScore);
+    msg.addInt32(t.dynamicsScore);
+    msg.addInt32(t.stereoScore);
+    msg.addInt32(t.referenceUsed ? 1 : 0);
+    msg.addFloat32(t.lufsDelta);
+    msg.addFloat32(t.lowEndDeltaPercent);
+    msg.addFloat32(t.presenceDeltaPercent);
+    msg.addFloat32(t.crestDeltaDb);
+    msg.addFloat32(t.widthDeltaPercent);
+    msg.addFloat32(t.correlationDelta);
+    msg.addString(t.mode);
+    msg.addString(t.action);
 
     sender.send(msg);
 }

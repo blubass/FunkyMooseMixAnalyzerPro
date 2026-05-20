@@ -22,6 +22,7 @@ No replacement for your ears – but a damn good second pair of eyes. The Funky 
 
 *   **Interactive FFT Analysis**: Dive deep into your frequency spectrum. Includes hover values, M/S representation, and target curves.
 *   **Honest Track Comparison (A/B)**: Load reference tracks and compare them directly with your mix. The difference curve immediately shows you where you stand compared to your idol.
+*   **Reference Target Match**: The plugin can score the current pass against the selected genre profile or a captured reference, with loudness, tone, dynamics, stereo deltas, and a concrete next move.
 *   **Genre Reference Curves**: Over 30 profiles ranging from Techno to Rock to Podcasts help you find the right balance.
 *   **Funky Moose Advice Engine**: Instead of empty AI buzzwords, you get solid tips based on your actual measurements – from "clean up the low end" to resonance warnings.
 
@@ -120,6 +121,7 @@ The plugin exposes the following metrics via `getMetrics()`:
 - **Spectrum**: spectralCentroidHz, resonanceFreqHz
 - **Bands**: bandPercents, bandCorrelations
 - **Auto Master**: optional off-by-default processing with strength, target LUFS, ceiling, gain, tone-shaping, stereo width, glue-compression, limiter-reduction, loudness-match A/B audition, release-score, safety-governor recommendation, and equal-loudness A/B quality readouts
+- **Target Match**: deterministic genre/reference matching score with loudness, tone, dynamics, stereo domain scores and deltas
 
 For full API details, see `PluginProcessor.h`.
 

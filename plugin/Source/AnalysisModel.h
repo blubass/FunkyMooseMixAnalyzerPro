@@ -208,10 +208,44 @@ struct MixAssessment
     bool releaseReady = false;
 };
 
+struct TargetMatch
+{
+    bool measurementReady = false;
+    bool referenceUsed = false;
+
+    int score = 0;
+    int loudnessScore = 0;
+    int tonalScore = 0;
+    int dynamicsScore = 0;
+    int stereoScore = 0;
+
+    float targetLufs = -14.0f;
+    float targetLowEndPercent = 18.0f;
+    float targetPresencePercent = 24.0f;
+    float targetCrestDb = 10.0f;
+    float targetWidthPercent = 65.0f;
+    float targetCorrelation = 0.65f;
+
+    float lufsDelta = 0.0f;
+    float lowEndDeltaPercent = 0.0f;
+    float presenceDeltaPercent = 0.0f;
+    float crestDeltaDb = 0.0f;
+    float widthDeltaPercent = 0.0f;
+    float correlationDelta = 0.0f;
+
+    juce::String mode = "Genre Profile";
+    juce::String title = "Measure Target";
+    juce::String text = "Play audio to compare against the selected target.";
+    juce::String action = "Run a full pass before final target matching.";
+};
+
 juce::StringArray getGenreNames();
 const GenreProfile& getGenreProfile(int index) noexcept;
 int getNumGenreProfiles() noexcept;
 MixAssessment assessMix(const MixAssessmentInput& input, const GenreProfile& profile);
+TargetMatch assessTargetMatch(const MixAssessmentInput& input,
+                              const GenreProfile& profile,
+                              const AnalyzerMetrics* referenceMetrics = nullptr);
 juce::String formatRange(const Range& range, const juce::String& suffix, int decimals = 0);
 
 float lowEndOf(const AnalyzerMetrics& source) noexcept;

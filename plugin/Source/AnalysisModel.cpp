@@ -76,6 +76,19 @@ fmma::Range lraRangeForProfile(const fmma::GenreProfile& profile)
     return { 3.0f, 13.0f };
 }
 
+float midpoint(const fmma::Range& range) noexcept
+{
+    return (range.low + range.high) * 0.5f;
+}
+
+int scoreDelta(float delta, float penaltyPerUnit, int fallback = 70) noexcept
+{
+    if (! std::isfinite(delta))
+        return fallback;
+
+    return juce::jlimit(0, 100, 100 - static_cast<int>(std::round(std::abs(delta) * penaltyPerUnit)));
+}
+
 int scoreRange(float value, fmma::Range range, float penaltyPerUnit, int fallback) noexcept
 {
     if (! std::isfinite(value))
@@ -969,6 +982,158 @@ MixAssessment assessMix(const MixAssessmentInput& input, const GenreProfile& pro
         result.verdictKey = "polish";
         result.verdictTitle = "Polish";
         result.statusLine = "Close to target; refine loudness, dynamics, or tone.";
+    }
+
+    return result;
+}
+
+TargetMatch assessTargetMatch(const MixAssessmentInput& input,
+                              const GenreProfile& profile,
+                              const AnalyzerMetrics* referenceMetrics)
+{
+    TargetMatch result;
+    const auto durationForAssessment = input.fullPassCompleted ? input.fullPassSeconds : input.analysisSeconds;
+    result.measurementReady = durationForAssessment >= 8.0f && hasAudioValue(input.integratedLufs);
+
+    const auto referenceHasLoudness = referenceMetrics != nullptr && hasAudioValue(referenceMetrics->integratedLufs);
+    const auto referenceLowEnd = referenceMetrics != nullptr ? lowEndOf(*referenceMetrics) : 0.0f;
+    const auto referencePresence = referenceMetrics != nullptr ? presenceOf(*referenceMetrics) : 0.0f;
+    const auto referenceHasTone = referenceMetrics != nullptr
+        && referenceLowEnd > 0.1f
+        && referencePresence > 0.1f;
+    const auto referenceHasDynamics = referenceMetrics != nullptr
+        && std::isfinite(referenceMetrics->crestDb)
+        && referenceMetrics->crestDb > 0.0f;
+    const auto referenceHasStereo = referenceMetrics != nullptr
+        && std::isfinite(referenceMetrics->widthPct)
+        && referenceMetrics->widthPct > 0.0f;
+
+    result.referenceUsed = referenceHasLoudness || referenceHasTone || referenceHasDynamics || referenceHasStereo;
+    result.mode = result.referenceUsed ? "Reference + Genre" : "Genre Profile";
+
+    const auto effectivePresenceMax = input.instrumental ? profile.presenceMax : profile.presenceMax - 4.0f;
+    const auto presenceMin = input.instrumental ? juce::jmax(8.0f, effectivePresenceMax - 18.0f) : 18.0f;
+    const auto targetPresenceFallback = juce::jlimit(presenceMin,
+                                                     effectivePresenceMax,
+                                                     midpoint(fmma::Range { presenceMin, effectivePresenceMax }));
+    const auto targetCorrelationFallback = juce::jlimit(-1.0f,
+                                                        1.0f,
+                                                        juce::jmax(profile.correlationMin + 0.25f,
+                                                                   profile.wideExpected ? 0.58f : 0.68f));
+
+    result.targetLufs = referenceHasLoudness ? referenceMetrics->integratedLufs : profile.targetLufs;
+    result.targetLowEndPercent = referenceHasTone ? referenceLowEnd : midpoint(profile.lowEndRange);
+    result.targetPresencePercent = referenceHasTone ? referencePresence : targetPresenceFallback;
+    result.targetCrestDb = referenceHasDynamics ? referenceMetrics->crestDb : midpoint(profile.crestRange);
+    result.targetWidthPercent = referenceHasStereo ? referenceMetrics->widthPct : (profile.wideExpected ? 65.0f : 35.0f);
+    result.targetCorrelation = referenceMetrics != nullptr && std::isfinite(referenceMetrics->correlation)
+        ? referenceMetrics->correlation
+        : targetCorrelationFallback;
+
+    result.lufsDelta = input.integratedLufs - result.targetLufs;
+    result.lowEndDeltaPercent = input.lowEndPercent - result.targetLowEndPercent;
+    result.presenceDeltaPercent = input.presencePercent - result.targetPresencePercent;
+    result.crestDeltaDb = input.crestDb - result.targetCrestDb;
+    result.widthDeltaPercent = input.widthPct - result.targetWidthPercent;
+    result.correlationDelta = input.correlation - result.targetCorrelation;
+
+    result.loudnessScore = scoreDelta(result.lufsDelta, result.referenceUsed ? 12.0f : 7.0f, 50);
+    const auto lowScore = scoreDelta(result.lowEndDeltaPercent, result.referenceUsed ? 4.5f : 3.5f, 70);
+    const auto presenceScore = scoreDelta(result.presenceDeltaPercent, result.referenceUsed ? 4.2f : 3.2f, 70);
+    result.tonalScore = juce::jlimit(0, 100, static_cast<int>(std::round((lowScore * 0.52f) + (presenceScore * 0.48f))));
+
+    const auto crestScore = scoreDelta(result.crestDeltaDb, result.referenceUsed ? 9.0f : 6.0f, 70);
+    const auto lraTargetRange = lraRangeForProfile(profile);
+    const auto lraScore = input.lraLu > 0.0f ? scoreRange(input.lraLu, lraTargetRange, 6.0f, 70) : 70;
+    result.dynamicsScore = juce::jlimit(0, 100, static_cast<int>(std::round((crestScore * 0.72f) + (lraScore * 0.28f))));
+
+    const auto widthScore = scoreDelta(result.widthDeltaPercent, result.referenceUsed ? 1.8f : 1.35f, 70);
+    auto correlationScore = 100;
+    if (std::isfinite(result.correlationDelta))
+    {
+        const auto penalty = result.correlationDelta < 0.0f
+            ? std::abs(result.correlationDelta) * 140.0f
+            : std::abs(result.correlationDelta) * 45.0f;
+        correlationScore = juce::jlimit(0, 100, 100 - static_cast<int>(std::round(penalty)));
+    }
+    result.stereoScore = juce::jlimit(0, 100, static_cast<int>(std::round((widthScore * 0.48f) + (correlationScore * 0.52f))));
+
+    result.score = juce::jlimit(0, 100, static_cast<int>(std::round(
+        result.loudnessScore * 0.23f
+        + result.tonalScore * 0.32f
+        + result.dynamicsScore * 0.21f
+        + result.stereoScore * 0.24f)));
+
+    if (! result.measurementReady)
+    {
+        result.score = juce::jmin(result.score, 25);
+        result.title = "Measure Target";
+        result.text = result.referenceUsed ? "Reference is stored; play the current mix to build a target match."
+                                           : "Play audio to match against the selected genre profile.";
+        result.action = "Run Start Pass and capture the loudest section before trusting target matching.";
+        return result;
+    }
+
+    struct Candidate
+    {
+        float severity = 0.0f;
+        juce::String action;
+    };
+
+    Candidate best;
+    auto updateBest = [&best] (float severity, const juce::String& action)
+    {
+        if (severity > best.severity)
+            best = { severity, action };
+    };
+
+    updateBest(std::abs(result.lufsDelta) / 1.0f,
+               result.lufsDelta > 0.0f
+                   ? "Target Match: trim loudness/limiter drive by about "
+                         + juce::String(std::abs(result.lufsDelta), 1) + " LU toward "
+                         + juce::String(result.targetLufs, 1) + " LUFS."
+                   : "Target Match: add controlled loudness by about "
+                         + juce::String(std::abs(result.lufsDelta), 1) + " LU toward "
+                         + juce::String(result.targetLufs, 1) + " LUFS.");
+    updateBest(std::abs(result.lowEndDeltaPercent) / 4.0f,
+               result.lowEndDeltaPercent > 0.0f
+                   ? "Target Match: low-end is above target; clean kick/bass masking before adding level."
+                   : "Target Match: low-end is below target; add bass weight or harmonics for translation.");
+    updateBest(std::abs(result.presenceDeltaPercent) / 4.0f,
+               result.presenceDeltaPercent > 0.0f
+                   ? "Target Match: presence is above target; check 2-6 kHz harshness and vocal edge."
+                   : "Target Match: presence is below target; clear low-mid masking or add a gentle focal lift.");
+    updateBest(std::abs(result.crestDeltaDb) / 2.0f,
+               result.crestDeltaDb > 0.0f
+                   ? "Target Match: crest is higher than target; control peaks without flattening the mix."
+                   : "Target Match: crest is lower than target; ease compression or restore transient punch.");
+    updateBest(std::abs(result.widthDeltaPercent) / 12.0f,
+               result.widthDeltaPercent > 0.0f
+                   ? "Target Match: width is above target; narrow phase-heavy sides and verify mono."
+                   : "Target Match: width is below target; widen only above the low-end.");
+    updateBest(result.correlationDelta < 0.0f ? std::abs(result.correlationDelta) / 0.12f
+                                              : std::abs(result.correlationDelta) / 0.30f,
+               result.correlationDelta < 0.0f
+                   ? "Target Match: correlation is below target; reduce unsafe wideners and phase tricks."
+                   : "Target Match: correlation is above target; add stereo depth only if the genre/reference needs it.");
+
+    if (result.score >= 88)
+    {
+        result.title = result.referenceUsed ? "Reference Locked" : "Target Locked";
+        result.text = result.mode + " match is tight across loudness, tone, dynamics, and stereo.";
+        result.action = "Keep master moves subtle and confirm with matched-loudness A/B.";
+    }
+    else if (result.score >= 72)
+    {
+        result.title = "Close Target";
+        result.text = result.mode + " match is close; one domain still needs a controlled move.";
+        result.action = best.action;
+    }
+    else
+    {
+        result.title = "Target Gap";
+        result.text = result.mode + " match shows a clear gap before final mastering decisions.";
+        result.action = best.action;
     }
 
     return result;

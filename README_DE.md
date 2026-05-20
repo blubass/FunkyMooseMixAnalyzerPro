@@ -102,7 +102,7 @@ Du kannst das native macOS Bundle (`.app`) und den Installer (`.dmg`) selbst gen
 
 ## 🛠️ Plugin
 
-Das JUCE-Plugin gibt es als VST3, AU und Standalone. Standardmäßig bleibt es ein transparenter Analyzer. Wenn **Auto Master** bewusst aktiviert wird, arbeitet ein konservativer Master-Assistent mit Genre-Ziel-LUFS, -1.0 dBTP Ausgangsschutz, leichter Tonbalance-Korrektur, Stereo-Sicherheitslogik, adaptiver Glue-Kompression, Loudness-Match-A/B-Abhörmodus, Equal-Loudness-A/B-Check, Safety-Governor-Empfehlung, Auto-Master-Release-Score und Stärke-Regler.
+Das JUCE-Plugin gibt es als VST3, AU und Standalone. Standardmäßig bleibt es ein transparenter Analyzer. Wenn **Auto Master** bewusst aktiviert wird, arbeitet ein konservativer Master-Assistent mit Genre-Ziel-LUFS, -1.0 dBTP Ausgangsschutz, leichter Tonbalance-Korrektur, Stereo-Sicherheitslogik, adaptiver Glue-Kompression, Loudness-Match-A/B-Abhörmodus, Equal-Loudness-A/B-Check, Safety-Governor-Empfehlung, Auto-Master-Release-Score und Stärke-Regler. Die neue Target-Match-Engine bewertet den aktuellen Pass zusätzlich gegen Genre-Profil oder gespeicherte Referenz mit Loudness-, Tonal-, Dynamik- und Stereo-Deltas.
 
 ---
 

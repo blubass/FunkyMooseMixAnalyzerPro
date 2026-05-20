@@ -322,6 +322,7 @@ def plugin_report_to_analysis(report, req_id):
     release_gate_payload = assessment.get("releaseGate") if isinstance(assessment.get("releaseGate"), dict) else {}
     release_gate_blockers = release_gate_payload.get("blockers") if isinstance(release_gate_payload.get("blockers"), list) else []
     auto_master_payload = report.get("autoMaster") if isinstance(report.get("autoMaster"), dict) else {}
+    target_match_payload = report.get("targetMatch") if isinstance(report.get("targetMatch"), dict) else {}
     measured_lufs = slice_data["I"]
     target_lufs = profile["target_lufs"]
     lufs_delta = round(measured_lufs - target_lufs, 1) if measured_lufs is not None and target_lufs is not None else None
@@ -390,6 +391,31 @@ def plugin_report_to_analysis(report, req_id):
             "recommended_strength_percent": rounded_number(auto_master_payload.get("recommendedStrengthPercent"), 1),
             "strength_trim_percent": rounded_number(auto_master_payload.get("strengthTrimPercent"), 1),
         },
+        "target_match": {
+            "mode": str(target_match_payload.get("mode") or "Genre Profile"),
+            "reference_used": bool(target_match_payload.get("referenceUsed", False)),
+            "measurement_ready": bool(target_match_payload.get("measurementReady", False)),
+            "score": int(max(0, min(100, finite_number(target_match_payload.get("score"), scores.get("targetMatch", 0)) or 0))),
+            "loudness_score": int(max(0, min(100, finite_number(target_match_payload.get("loudnessScore"), 0) or 0))),
+            "tonal_score": int(max(0, min(100, finite_number(target_match_payload.get("tonalScore"), 0) or 0))),
+            "dynamics_score": int(max(0, min(100, finite_number(target_match_payload.get("dynamicsScore"), 0) or 0))),
+            "stereo_score": int(max(0, min(100, finite_number(target_match_payload.get("stereoScore"), 0) or 0))),
+            "target_lufs": rounded_number(target_match_payload.get("targetLufs"), 2),
+            "target_low_end_percent": rounded_number(target_match_payload.get("targetLowEndPercent"), 2),
+            "target_presence_percent": rounded_number(target_match_payload.get("targetPresencePercent"), 2),
+            "target_crest_db": rounded_number(target_match_payload.get("targetCrestDb"), 2),
+            "target_width_percent": rounded_number(target_match_payload.get("targetWidthPercent"), 2),
+            "target_correlation": rounded_number(target_match_payload.get("targetCorrelation"), 3),
+            "lufs_delta": rounded_number(target_match_payload.get("lufsDelta"), 2),
+            "low_end_delta_percent": rounded_number(target_match_payload.get("lowEndDeltaPercent"), 2),
+            "presence_delta_percent": rounded_number(target_match_payload.get("presenceDeltaPercent"), 2),
+            "crest_delta_db": rounded_number(target_match_payload.get("crestDeltaDb"), 2),
+            "width_delta_percent": rounded_number(target_match_payload.get("widthDeltaPercent"), 2),
+            "correlation_delta": rounded_number(target_match_payload.get("correlationDelta"), 3),
+            "title": str(target_match_payload.get("title") or ""),
+            "text": str(target_match_payload.get("text") or ""),
+            "action": str(target_match_payload.get("action") or ""),
+        },
         "aggregate": aggregate,
         "verdict": verdict,
         "slice_count": 1,
@@ -434,6 +460,7 @@ def plugin_report_to_analysis(report, req_id):
             "plainTextReport": report.get("plainTextReport"),
             "deliveryPreview": report.get("deliveryPreview"),
             "autoMaster": auto_master_payload,
+            "targetMatch": target_match_payload,
             "worstCase": worst_case,
             "reference": report.get("reference"),
             "snapshots": report.get("snapshots"),

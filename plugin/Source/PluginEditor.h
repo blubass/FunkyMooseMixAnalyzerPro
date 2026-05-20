@@ -49,6 +49,7 @@ private:
     juce::String mixDoctorSummary() const;
     juce::String mixDoctorSummary(const fmma::AnalyzerMetrics& sourceMetrics,
                                   const fmma::MixAssessment& sourceAssessment) const;
+    fmma::TargetMatch makeTargetMatch(const fmma::MixAssessmentInput& input) const;
     fmma::MixAssessmentInput makeAssessmentInput() const;
     void smoothDisplayMetrics(const fmma::AnalyzerMetrics& raw);
     void syncStoredSnapshotsFromProcessor();
@@ -61,6 +62,7 @@ private:
     FunkyMooseMixAnalyzerAudioProcessor& audioProcessor;
     fmma::AnalyzerMetrics metrics;
     fmma::MixAssessment assessment;
+    fmma::TargetMatch targetMatch;
     bool hasDisplayMetrics = false;
     int assessmentCountdown = 0;
     int lastGenreIndex = -1;

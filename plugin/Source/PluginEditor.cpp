@@ -249,7 +249,9 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
     const auto instrumentalState = instrumentalToggle.getToggleState();
     if (--assessmentCountdown <= 0 || genreIndex != lastGenreIndex || instrumentalState != lastInstrumentalState)
     {
-        assessment = fmma::assessMix(audioProcessor.makeAssessmentInput(), fmma::getGenreProfile(genreIndex));
+        const auto inputForAssessment = makeAssessmentInput();
+        assessment = fmma::assessMix(inputForAssessment, fmma::getGenreProfile(genreIndex));
+        targetMatch = makeTargetMatch(inputForAssessment);
         assessmentCountdown = 1;
         lastGenreIndex = genreIndex;
         lastInstrumentalState = instrumentalState;
@@ -267,7 +269,7 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
     summaryData.durationSeconds = metrics.fullPassCompleted ? metrics.fullPassSeconds : metrics.analysisSeconds;
     summaryData.lufsDelta = assessment.lufsDelta;
     
-    const auto input = audioProcessor.makeAssessmentInput();
+    const auto input = makeAssessmentInput();
     summaryData.lowEndPercent = input.lowEndPercent;
     summaryData.presencePercent = input.presencePercent;
     
@@ -415,32 +417,24 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
     scoreData.transientScore  = assessment.transientScore;
     scoreComponent.update(scoreData);
 
-    // Reference Component
+    // Target Match / Reference Component
     {
         CompareComponent::Data refData;
-        refData.title = "Reference";
-        if (! hasReferenceMetrics)
-        {
-            refData.emptyMessage = "No reference captured.";
-            refData.metrics = {
-                { "State",   referenceCaptureInProgress ? "Recording" : "Empty" },
-                { "Compare", "Unavailable" }
-            };
-        }
-        else
-        {
-            refData.rowHeight = 20.0f;
-            refData.metrics = {
-                { "Ref Time",   formatDuration(referenceMetrics.fullPassSeconds > 0.0f ? referenceMetrics.fullPassSeconds : referenceMetrics.analysisSeconds) },
-                { "LUFS Delta",      formatSigned(metrics.integratedLufs - referenceMetrics.integratedLufs, " LU") },
-                { "Low-End Delta",   formatSigned(lowEndOf(metrics) - lowEndOf(referenceMetrics), "%") },
-                { "Presence Delta",  formatSigned(presenceOf(metrics) - presenceOf(referenceMetrics), "%") },
-                { "Crest Delta",     formatSigned(metrics.crestDb - referenceMetrics.crestDb, " dB") },
-                { "Width Delta",     formatSigned(metrics.widthPct - referenceMetrics.widthPct, "%") }
-            };
-            refData.noteTitle = "Ref Note";
-            refData.noteText  = referenceNote();
-        }
+        refData.title = "Target Match";
+        refData.emptyMessage = hasReferenceMetrics ? "" : "Using selected genre profile.";
+        refData.rowHeight = 18.0f;
+        refData.metrics = {
+            { "Score", juce::String(targetMatch.score) + "/100" },
+            { "Mode", targetMatch.mode },
+            { "LUFS Delta", formatSigned(targetMatch.lufsDelta, " LU") },
+            { "Low/Presence", formatSigned(targetMatch.lowEndDeltaPercent, "%") + " / "
+                                + formatSigned(targetMatch.presenceDeltaPercent, "%") },
+            { "Crest Delta", formatSigned(targetMatch.crestDeltaDb, " dB") },
+            { "Width/Corr", formatSigned(targetMatch.widthDeltaPercent, "%") + " / "
+                              + formatSigned(targetMatch.correlationDelta, "", 2) }
+        };
+        refData.noteTitle = targetMatch.title;
+        refData.noteText  = targetMatch.measurementReady ? targetMatch.action : targetMatch.text;
         referenceComponent.update(refData);
     }
 
@@ -752,6 +746,20 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::mixDoctorSummary(
     return summary;
 }
 
+fmma::TargetMatch FunkyMooseMixAnalyzerAudioProcessorEditor::makeTargetMatch(
+    const fmma::MixAssessmentInput& input) const
+{
+    const auto& profile = fmma::getGenreProfile(genreBox.getSelectedItemIndex());
+    return fmma::assessTargetMatch(input, profile, hasReferenceMetrics ? &referenceMetrics : nullptr);
+}
+
+fmma::MixAssessmentInput FunkyMooseMixAnalyzerAudioProcessorEditor::makeAssessmentInput() const
+{
+    auto input = audioProcessor.makeAssessmentInput();
+    input.instrumental = instrumentalToggle.getToggleState();
+    return input;
+}
+
 juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::formatDb(float value, int decimals)
 {
     if (value <= -119.0f || ! std::isfinite(value))
@@ -894,7 +902,7 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::copyJsonReportToClipboard()
 juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport() const
 {
     const auto& profile = fmma::getGenreProfile(genreBox.getSelectedItemIndex());
-    const auto input = audioProcessor.makeAssessmentInput();
+    const auto input = makeAssessmentInput();
     const auto sourceAssessment = fmma::assessMix(input, profile);
 
     return buildTextReport(audioProcessor.getMetrics(), input, sourceAssessment);
@@ -909,6 +917,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
     const auto truePeakForReport = sourceMetrics.fullPassCompleted
         ? juce::jmax(sourceMetrics.truePeakDb, sourceMetrics.worstTruePeakDb)
         : sourceMetrics.truePeakDb;
+    const auto targetMatchReport = makeTargetMatch(input);
     juce::String report;
     report << "FUNKY MOOSE MIX ANALYZER - LIVE PLUGIN REPORT\n";
     report << "Genre Profile: " << profile.name << "\n";
@@ -982,6 +991,19 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
     report << "Verdict: " << sourceAssessment.verdictTitle << "\n";
     report << "Mix Score: " << sourceAssessment.overallScore << "/100\n";
     report << "Mix Doctor Summary: " << mixDoctorSummary(sourceMetrics, sourceAssessment) << "\n";
+    report << "Target Match: " << targetMatchReport.title << " (" << targetMatchReport.score << "/100, "
+           << targetMatchReport.mode << ")\n";
+    report << "Target Match Domains: loudness " << targetMatchReport.loudnessScore
+           << ", tone " << targetMatchReport.tonalScore
+           << ", dynamics " << targetMatchReport.dynamicsScore
+           << ", stereo " << targetMatchReport.stereoScore << "\n";
+    report << "Target Match Deltas: LUFS " << formatSigned(targetMatchReport.lufsDelta, " LU")
+           << ", low " << formatSigned(targetMatchReport.lowEndDeltaPercent, "%")
+           << ", presence " << formatSigned(targetMatchReport.presenceDeltaPercent, "%")
+           << ", crest " << formatSigned(targetMatchReport.crestDeltaDb, " dB")
+           << ", width " << formatSigned(targetMatchReport.widthDeltaPercent, "%")
+           << ", corr " << formatSigned(targetMatchReport.correlationDelta, "", 2) << "\n";
+    report << "Target Match Action: " << targetMatchReport.action << "\n";
     report << "Tone Score: " << sourceAssessment.toneScore << "/100\n";
     report << "LRA Score: " << sourceAssessment.lraScore << "/100\n";
     report << "Transient Score: " << sourceAssessment.transientScore << "/100\n";
@@ -1106,6 +1128,8 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
 
     for (auto i = 0; i < sourceAssessment.priorityActionCount; ++i)
         report << juce::String(i + 1) << ". " << sourceAssessment.priorityActions[static_cast<size_t>(i)] << "\n";
+    if (targetMatchReport.measurementReady && targetMatchReport.score < 88)
+        report << "T. " << targetMatchReport.action << "\n";
     if (referenceActionNote(sourceMetrics, sourceAssessment).isNotEmpty())
         report << "R. " << referenceActionNote(sourceMetrics, sourceAssessment) << "\n";
 
@@ -1115,7 +1139,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
 juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport() const
 {
     const auto& profile = fmma::getGenreProfile(genreBox.getSelectedItemIndex());
-    const auto input = audioProcessor.makeAssessmentInput();
+    const auto input = makeAssessmentInput();
     const auto sourceAssessment = fmma::assessMix(input, profile);
 
     return buildJsonReport(audioProcessor.getMetrics(), input, sourceAssessment);
@@ -1130,6 +1154,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     const auto truePeakForReport = sourceMetrics.fullPassCompleted
         ? juce::jmax(sourceMetrics.truePeakDb, sourceMetrics.worstTruePeakDb)
         : sourceMetrics.truePeakDb;
+    const auto targetMatchReport = makeTargetMatch(input);
 
     auto makeRange = [] (const fmma::Range& range)
     {
@@ -1196,6 +1221,7 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     setJsonProperty(scores, "lra", sourceAssessment.lraScore);
     setJsonProperty(scores, "transient", sourceAssessment.transientScore);
     setJsonProperty(scores, "tone", sourceAssessment.toneScore);
+    setJsonProperty(scores, "targetMatch", targetMatchReport.score);
     setJsonProperty(root, "scores", scores);
 
     auto assessmentJson = juce::var { new juce::DynamicObject() };
@@ -1234,10 +1260,38 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     juce::Array<juce::var> actions;
     for (auto i = 0; i < sourceAssessment.priorityActionCount; ++i)
         actions.add(sourceAssessment.priorityActions[static_cast<size_t>(i)]);
+    if (targetMatchReport.measurementReady && targetMatchReport.score < 88)
+        actions.add(targetMatchReport.action);
     if (referenceActionNote(sourceMetrics, sourceAssessment).isNotEmpty())
         actions.add(referenceActionNote(sourceMetrics, sourceAssessment));
     setJsonProperty(assessmentJson, "priorityActions", actions);
     setJsonProperty(root, "assessment", assessmentJson);
+
+    auto targetMatchJson = juce::var { new juce::DynamicObject() };
+    setJsonProperty(targetMatchJson, "mode", targetMatchReport.mode);
+    setJsonProperty(targetMatchJson, "referenceUsed", targetMatchReport.referenceUsed);
+    setJsonProperty(targetMatchJson, "measurementReady", targetMatchReport.measurementReady);
+    setJsonProperty(targetMatchJson, "score", targetMatchReport.score);
+    setJsonProperty(targetMatchJson, "loudnessScore", targetMatchReport.loudnessScore);
+    setJsonProperty(targetMatchJson, "tonalScore", targetMatchReport.tonalScore);
+    setJsonProperty(targetMatchJson, "dynamicsScore", targetMatchReport.dynamicsScore);
+    setJsonProperty(targetMatchJson, "stereoScore", targetMatchReport.stereoScore);
+    setJsonProperty(targetMatchJson, "targetLufs", jsonNumber(targetMatchReport.targetLufs));
+    setJsonProperty(targetMatchJson, "targetLowEndPercent", jsonNumber(targetMatchReport.targetLowEndPercent));
+    setJsonProperty(targetMatchJson, "targetPresencePercent", jsonNumber(targetMatchReport.targetPresencePercent));
+    setJsonProperty(targetMatchJson, "targetCrestDb", jsonNumber(targetMatchReport.targetCrestDb));
+    setJsonProperty(targetMatchJson, "targetWidthPercent", jsonNumber(targetMatchReport.targetWidthPercent));
+    setJsonProperty(targetMatchJson, "targetCorrelation", jsonNumber(targetMatchReport.targetCorrelation));
+    setJsonProperty(targetMatchJson, "lufsDelta", jsonNumber(targetMatchReport.lufsDelta));
+    setJsonProperty(targetMatchJson, "lowEndDeltaPercent", jsonNumber(targetMatchReport.lowEndDeltaPercent));
+    setJsonProperty(targetMatchJson, "presenceDeltaPercent", jsonNumber(targetMatchReport.presenceDeltaPercent));
+    setJsonProperty(targetMatchJson, "crestDeltaDb", jsonNumber(targetMatchReport.crestDeltaDb));
+    setJsonProperty(targetMatchJson, "widthDeltaPercent", jsonNumber(targetMatchReport.widthDeltaPercent));
+    setJsonProperty(targetMatchJson, "correlationDelta", jsonNumber(targetMatchReport.correlationDelta));
+    setJsonProperty(targetMatchJson, "title", targetMatchReport.title);
+    setJsonProperty(targetMatchJson, "text", targetMatchReport.text);
+    setJsonProperty(targetMatchJson, "action", targetMatchReport.action);
+    setJsonProperty(root, "targetMatch", targetMatchJson);
 
     auto autoMasterJson = juce::var { new juce::DynamicObject() };
     setJsonProperty(autoMasterJson, "enabled", sourceMetrics.autoMasterEnabled);

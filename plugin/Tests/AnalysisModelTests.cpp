@@ -219,6 +219,41 @@ void fullPassUsesWorstCaseHolds()
     expect(! result.correlationOk, "worst-case correlation should fail even when current correlation is safe");
     expectContains(result.priorityActions[0], "Clipping", "worst-case clipping should be ranked first");
 }
+
+void targetProfileMatchUsesReferenceWhenCaptured()
+{
+    auto input = makeHealthyStreamingInput();
+    fmma::AnalyzerMetrics reference;
+    reference.integratedLufs = -10.0f;
+    reference.crestDb = 8.0f;
+    reference.correlation = 0.62f;
+    reference.widthPct = 82.0f;
+    reference.bandPercents[0] = 10.0f;
+    reference.bandPercents[1] = 18.0f;
+    reference.bandPercents[4] = 30.0f;
+    reference.analysisSeconds = 180.0f;
+    reference.fullPassSeconds = 180.0f;
+    reference.fullPassCompleted = true;
+
+    const auto result = fmma::assessTargetMatch(input, profileNamed("Streaming / General"), &reference);
+
+    expect(result.measurementReady, "target match should be ready for a healthy full pass");
+    expect(result.referenceUsed, "target match should use a captured reference");
+    expect(result.mode == "Reference + Genre", "target match mode should name reference matching");
+    expect(result.score < 88, "different reference should create a target-match gap");
+    expect(result.lufsDelta < -3.5f, "target match should compare LUFS against the reference");
+    expectContains(result.action, "Target Match", "target match should produce an explicit target action");
+}
+
+void targetProfileMatchFallsBackToGenreProfile()
+{
+    const auto result = fmma::assessTargetMatch(makeHealthyStreamingInput(), profileNamed("Streaming / General"));
+
+    expect(result.measurementReady, "genre-only target match should be ready for healthy input");
+    expect(! result.referenceUsed, "genre-only target match should not claim a reference");
+    expect(result.score >= 85, "healthy streaming input should closely match the genre profile");
+    expect(result.mode == "Genre Profile", "genre-only target match should name the selected profile mode");
+}
 }
 
 int main()
@@ -230,6 +265,8 @@ int main()
     clippingDominatesActions();
     lowEndPhaseIsAReleaseBlocker();
     fullPassUsesWorstCaseHolds();
+    targetProfileMatchUsesReferenceWhenCaptured();
+    targetProfileMatchFallsBackToGenreProfile();
 
     if (failures == 0)
     {

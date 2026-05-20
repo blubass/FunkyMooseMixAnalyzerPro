@@ -78,6 +78,7 @@ private:
     juce::ComboBox genreBox;
     juce::ToggleButton instrumentalToggle;
     juce::ToggleButton autoMasterToggle;
+    juce::ToggleButton autoMasterAuditionToggle;
     juce::Slider autoMasterStrengthSlider;
     juce::TextButton passButton;
     juce::TextButton referenceButton;
@@ -91,6 +92,7 @@ private:
     std::unique_ptr<ComboAttachment> genreAttachment;
     std::unique_ptr<ButtonAttachment> instrumentalAttachment;
     std::unique_ptr<ButtonAttachment> autoMasterAttachment;
+    std::unique_ptr<ButtonAttachment> autoMasterAuditionAttachment;
     std::unique_ptr<SliderAttachment> autoMasterStrengthAttachment;
 
     SummaryComponent summaryComponent;

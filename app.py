@@ -361,6 +361,7 @@ def plugin_report_to_analysis(report, req_id):
         },
         "auto_master": {
             "enabled": bool(auto_master_payload.get("enabled", False)),
+            "audition_match": bool(auto_master_payload.get("auditionMatch", False)),
             "strength_percent": rounded_number(auto_master_payload.get("strengthPercent"), 1),
             "target_lufs": rounded_number(auto_master_payload.get("targetLufs"), 2),
             "ceiling_dbtp": rounded_number(auto_master_payload.get("ceilingDbTp"), 2),
@@ -382,6 +383,9 @@ def plugin_report_to_analysis(report, req_id):
             "ab_true_peak_delta_db": rounded_number(auto_master_payload.get("abTruePeakDeltaDb"), 2),
             "ab_dynamics_delta_db": rounded_number(auto_master_payload.get("abDynamicsDeltaDb"), 2),
             "ab_score": rounded_number(auto_master_payload.get("abScore"), 1),
+            "audition_gain_db": rounded_number(auto_master_payload.get("auditionGainDb"), 2),
+            "audition_loudness_delta_db": rounded_number(auto_master_payload.get("auditionLoudnessDeltaDb"), 2),
+            "audition_true_peak_dbtp": rounded_number(auto_master_payload.get("auditionTruePeakDbTp"), 2),
         },
         "aggregate": aggregate,
         "verdict": verdict,

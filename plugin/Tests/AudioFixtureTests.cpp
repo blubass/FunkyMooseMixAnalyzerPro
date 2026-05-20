@@ -301,10 +301,12 @@ void setParameterNormalised(FunkyMooseMixAnalyzerAudioProcessor& processor,
 
 juce::AudioBuffer<float> renderFixture(const juce::AudioBuffer<float>& source,
                                        bool autoMasterEnabled,
-                                       float strengthNormalised = 1.0f)
+                                       float strengthNormalised = 1.0f,
+                                       bool auditionMatch = false)
 {
     auto processor = makePreparedProcessor();
     setParameterNormalised(*processor, "autoMasterEnabled", autoMasterEnabled ? 1.0f : 0.0f);
+    setParameterNormalised(*processor, "autoMasterAuditionMatch", auditionMatch ? 1.0f : 0.0f);
     setParameterNormalised(*processor, "autoMasterStrength", strengthNormalised);
 
     juce::AudioBuffer<float> rendered { 2, source.getNumSamples() };
@@ -329,10 +331,12 @@ juce::AudioBuffer<float> renderFixture(const juce::AudioBuffer<float>& source,
 
 fmma::AnalyzerMetrics renderFixtureMetrics(const juce::AudioBuffer<float>& source,
                                            bool autoMasterEnabled,
-                                           float strengthNormalised = 1.0f)
+                                           float strengthNormalised = 1.0f,
+                                           bool auditionMatch = false)
 {
     auto processor = makePreparedProcessor();
     setParameterNormalised(*processor, "autoMasterEnabled", autoMasterEnabled ? 1.0f : 0.0f);
+    setParameterNormalised(*processor, "autoMasterAuditionMatch", auditionMatch ? 1.0f : 0.0f);
     setParameterNormalised(*processor, "autoMasterStrength", strengthNormalised);
 
     juce::MidiBuffer midi;
@@ -503,6 +507,7 @@ void storedAnalysisStateRoundTrips()
 {
     auto source = makePreparedProcessor();
     setParameterNormalised(*source, "autoMasterEnabled", 1.0f);
+    setParameterNormalised(*source, "autoMasterAuditionMatch", 1.0f);
     setParameterNormalised(*source, "autoMasterStrength", 0.8f);
 
     const auto reference = makeStoredMetrics(1.0f);
@@ -521,6 +526,8 @@ void storedAnalysisStateRoundTrips()
     restored->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
     expect(restored->parameters.getRawParameterValue("autoMasterEnabled")->load() > 0.5f,
            "auto-master enabled parameter should restore from state");
+    expect(restored->parameters.getRawParameterValue("autoMasterAuditionMatch")->load() > 0.5f,
+           "auto-master audition match parameter should restore from state");
     expectNear(restored->parameters.getRawParameterValue("autoMasterStrength")->load(),
                80.0f,
                0.1f,
@@ -651,6 +658,33 @@ void autoMasterRaisesQuietProgramMaterial()
            "auto-master A/B score should stay in a bounded professional range");
 }
 
+void autoMasterAuditionMatchTrimsBoostForHonestAB()
+{
+    const auto source = makeStereoSine(30.0f, 1000.0f, juce::Decibels::decibelsToGain(-26.0f));
+    const auto mastered = renderFixture(source, true);
+    const auto matched = renderFixture(source, true, 1.0f, true);
+    const auto metrics = renderFixtureMetrics(source, true, 1.0f, true);
+    const auto tailStart = static_cast<int>(24.0 * testSampleRate);
+    const auto inputTailPeak = bufferPeak(source, tailStart);
+    const auto masteredTailPeak = bufferPeak(mastered, tailStart);
+    const auto matchedTailPeak = bufferPeak(matched, tailStart);
+
+    expect(masteredTailPeak > inputTailPeak * 1.35f,
+           "baseline auto-master render should raise quiet material before A/B matching");
+    expect(matchedTailPeak < masteredTailPeak * 0.75f,
+           "A/B match audition should trim boosted auto-master output for honest comparison");
+    expect(matchedTailPeak > inputTailPeak * 0.65f,
+           "A/B match audition should not collapse the program level");
+    expect(metrics.autoMasterAuditionMatch,
+           "auto-master audition match metric should reflect the enabled parameter");
+    expect(metrics.autoMasterAuditionGainDb < -0.5f,
+           "auto-master audition match should apply negative trim when Auto Master boosted the source");
+    expect(std::abs(metrics.autoMasterAuditionLoudnessDeltaDb) < 0.15f,
+           "auto-master audition match should keep the comparison close to the original loudness");
+    expect(metrics.autoMasterAuditionTruePeakDbTp <= metrics.autoMasterProjectedTruePeakDbTp,
+           "auto-master audition true peak should include the match trim");
+}
+
 void autoMasterReducesHotProgramMaterial()
 {
     const auto source = makeStereoSine(30.0f, 1000.0f, juce::Decibels::decibelsToGain(-0.3f));
@@ -700,6 +734,7 @@ int main()
     runFixtureTest("phaseCorrelationFixtureTestsPhase", phaseCorrelationFixtureTestsPhase);
     runFixtureTest("autoMasterBypassesWhenDisabled", autoMasterBypassesWhenDisabled);
     runFixtureTest("autoMasterRaisesQuietProgramMaterial", autoMasterRaisesQuietProgramMaterial);
+    runFixtureTest("autoMasterAuditionMatchTrimsBoostForHonestAB", autoMasterAuditionMatchTrimsBoostForHonestAB);
     runFixtureTest("autoMasterReducesHotProgramMaterial", autoMasterReducesHotProgramMaterial);
     runFixtureTest("autoMasterUsesGlueOnPeakyProgramMaterial", autoMasterUsesGlueOnPeakyProgramMaterial);
     if (failures == 0)

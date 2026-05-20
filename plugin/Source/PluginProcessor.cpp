@@ -441,6 +441,11 @@ FunkyMooseMixAnalyzerAudioProcessor::createParameterLayout()
         "Auto Master",
         false));
 
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID {"autoMasterAuditionMatch", 1},
+        "Auto Master Match A/B",
+        false));
+
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID {"autoMasterStrength", 1},
         "Auto Master Strength",
@@ -744,6 +749,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::resetAutoMasterState() noexcept
     autoMasterAbTruePeakDeltaDb.store(0.0f, std::memory_order_relaxed);
     autoMasterAbDynamicsDeltaDb.store(0.0f, std::memory_order_relaxed);
     autoMasterAbScore.store(0.0f, std::memory_order_relaxed);
+    autoMasterAuditionGainDb.store(0.0f, std::memory_order_relaxed);
+    autoMasterAuditionLoudnessDeltaDb.store(0.0f, std::memory_order_relaxed);
+    autoMasterAuditionTruePeakDbTp.store(-120.0f, std::memory_order_relaxed);
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<float>& buffer,
@@ -751,6 +759,8 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
                                                          int numSamples) noexcept
 {
     const auto enabled = parameters.getRawParameterValue("autoMasterEnabled")->load() >= 0.5f;
+    const auto auditionMatchEnabled = enabled
+        && parameters.getRawParameterValue("autoMasterAuditionMatch")->load() >= 0.5f;
     const auto strengthPercent = juce::jlimit(0.0f,
                                               100.0f,
                                               parameters.getRawParameterValue("autoMasterStrength")->load());
@@ -981,6 +991,20 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
         return limited;
     };
 
+    auto guardAuditionSample = [&] (float sample) noexcept
+    {
+        if (! std::isfinite(sample))
+            return 0.0f;
+
+        const auto absoluteSample = std::abs(sample);
+        if (absoluteSample <= kneeStart)
+            return sample;
+
+        const auto over = (absoluteSample - kneeStart) / kneeRange;
+        const auto shapedAbs = juce::jmin(ceilingGain, kneeStart + (kneeRange * std::tanh(over)));
+        return std::copysign(shapedAbs, sample);
+    };
+
     if (channelsToProcess == 1)
     {
         auto* mono = buffer.getWritePointer(0);
@@ -1074,6 +1098,23 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
     }
 
     const auto loudnessMatchGainDb = hasLoudness ? -smoothedAutoMasterGainDb : 0.0f;
+    auto auditionGainDb = 0.0f;
+    auto auditionLoudnessDeltaDb = 0.0f;
+    auto auditionTruePeakDbTp = -120.0f;
+    if (auditionMatchEnabled && hasLoudness)
+    {
+        auditionGainDb = loudnessMatchGainDb;
+        if (hasTruePeak && projectedTruePeak > -119.0f)
+            auditionGainDb = juce::jmin(auditionGainDb, autoMasterDefaultCeilingDbTp - projectedTruePeak);
+        auditionGainDb = juce::jlimit(-12.0f, 6.0f, auditionGainDb);
+        auditionLoudnessDeltaDb = juce::jlimit(-24.0f,
+                                               24.0f,
+                                               (projectedLufs + auditionGainDb) - metrics.integratedLufs);
+        auditionTruePeakDbTp = hasTruePeak && projectedTruePeak > -119.0f
+            ? juce::jmin(autoMasterDefaultCeilingDbTp, projectedTruePeak + auditionGainDb)
+            : -120.0f;
+    }
+
     const auto abMatchedLufs = hasLoudness
         ? juce::jlimit(-120.0f, 24.0f, projectedLufs + loudnessMatchGainDb)
         : -120.0f;
@@ -1197,6 +1238,20 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
     autoMasterAbTruePeakDeltaDb.store(abTruePeakDelta, std::memory_order_relaxed);
     autoMasterAbDynamicsDeltaDb.store(abDynamicsDelta, std::memory_order_relaxed);
     autoMasterAbScore.store(abScore, std::memory_order_relaxed);
+    autoMasterAuditionGainDb.store(auditionGainDb, std::memory_order_relaxed);
+    autoMasterAuditionLoudnessDeltaDb.store(auditionLoudnessDeltaDb, std::memory_order_relaxed);
+    autoMasterAuditionTruePeakDbTp.store(auditionTruePeakDbTp, std::memory_order_relaxed);
+
+    if (auditionMatchEnabled && std::abs(auditionGainDb) > 0.001f)
+    {
+        const auto auditionGain = decibelsToGain(auditionGainDb);
+        for (auto channel = 0; channel < channelsToProcess; ++channel)
+        {
+            auto* samples = buffer.getWritePointer(channel);
+            for (auto sample = 0; sample < numSamples; ++sample)
+                samples[sample] = guardAuditionSample(samples[sample] * auditionGain);
+        }
+    }
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::timerCallback()
@@ -1983,6 +2038,7 @@ fmma::AnalyzerMetrics FunkyMooseMixAnalyzerAudioProcessor::getMetrics() const
     metrics.hostTransportPlaying = hostTransportPlaying.load(std::memory_order_relaxed);
     metrics.hostAutoPassActive = hostAutoPassActive.load(std::memory_order_relaxed);
     metrics.autoMasterEnabled = parameters.getRawParameterValue("autoMasterEnabled")->load() >= 0.5f;
+    metrics.autoMasterAuditionMatch = parameters.getRawParameterValue("autoMasterAuditionMatch")->load() >= 0.5f;
     metrics.autoMasterStrength = autoMasterStrengthPct.load(std::memory_order_relaxed);
     metrics.autoMasterTargetLufs = autoMasterTargetLufs.load(std::memory_order_relaxed);
     metrics.autoMasterCeilingDbTp = autoMasterCeilingDbTp.load(std::memory_order_relaxed);
@@ -2004,6 +2060,9 @@ fmma::AnalyzerMetrics FunkyMooseMixAnalyzerAudioProcessor::getMetrics() const
     metrics.autoMasterAbTruePeakDeltaDb = autoMasterAbTruePeakDeltaDb.load(std::memory_order_relaxed);
     metrics.autoMasterAbDynamicsDeltaDb = autoMasterAbDynamicsDeltaDb.load(std::memory_order_relaxed);
     metrics.autoMasterAbScore = autoMasterAbScore.load(std::memory_order_relaxed);
+    metrics.autoMasterAuditionGainDb = autoMasterAuditionGainDb.load(std::memory_order_relaxed);
+    metrics.autoMasterAuditionLoudnessDeltaDb = autoMasterAuditionLoudnessDeltaDb.load(std::memory_order_relaxed);
+    metrics.autoMasterAuditionTruePeakDbTp = autoMasterAuditionTruePeakDbTp.load(std::memory_order_relaxed);
 
     for (auto band = 0; band < fmma::bandCount; ++band)
     {

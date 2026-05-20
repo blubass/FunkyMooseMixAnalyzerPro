@@ -108,6 +108,7 @@ class AppSmokeTest(unittest.TestCase):
             1, 65.0, -14.0, -1.0, 2.5, -0.4, -0.8, 0.2, 92.0, 0.6, 1.1,
             -11.5, -1.0, -2.5, 2.5, 0.4, 91.0,
             0.0, -3.5, -1.7, -1.7, 78.0,
+            1, -2.5, 0.0, -3.5,
         ]
 
         bridge._handle_metrics("/fmma/metrics", *args)
@@ -133,6 +134,10 @@ class AppSmokeTest(unittest.TestCase):
         self.assertEqual(metrics["autoMaster"]["abTruePeakDeltaDb"], -1.7)
         self.assertEqual(metrics["autoMaster"]["abDynamicsDeltaDb"], -1.7)
         self.assertEqual(metrics["autoMaster"]["abScore"], 78.0)
+        self.assertTrue(metrics["autoMaster"]["auditionMatch"])
+        self.assertEqual(metrics["autoMaster"]["auditionGainDb"], -2.5)
+        self.assertEqual(metrics["autoMaster"]["auditionLoudnessDeltaDb"], 0.0)
+        self.assertEqual(metrics["autoMaster"]["auditionTruePeakDbTp"], -3.5)
 
     def test_plugin_bridge_defaults_worst_clipping_for_older_messages(self):
         bridge = PluginBridge()

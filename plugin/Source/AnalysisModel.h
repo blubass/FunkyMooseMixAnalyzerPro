@@ -118,6 +118,7 @@ struct AnalyzerMetrics
     bool hostTransportPlaying = false;
     bool hostAutoPassActive = false;
     bool autoMasterEnabled = false;
+    bool autoMasterAuditionMatch = false;
     float autoMasterStrength = 0.0f;
     float autoMasterTargetLufs = -14.0f;
     float autoMasterCeilingDbTp = -1.0f;
@@ -139,6 +140,9 @@ struct AnalyzerMetrics
     float autoMasterAbTruePeakDeltaDb = 0.0f;
     float autoMasterAbDynamicsDeltaDb = 0.0f;
     float autoMasterAbScore = 0.0f;
+    float autoMasterAuditionGainDb = 0.0f;
+    float autoMasterAuditionLoudnessDeltaDb = 0.0f;
+    float autoMasterAuditionTruePeakDbTp = -120.0f;
     std::array<float, bandCount> bandPercents {};
     std::array<float, bandCount> bandCorrelations { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
     std::array<float, bandCount> bandSideRatiosDb { -120.0f, -120.0f, -120.0f, -120.0f, -120.0f, -120.0f };

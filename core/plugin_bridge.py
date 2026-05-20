@@ -77,6 +77,7 @@ class PluginBridge:
         # auto master projected LUFS, projected TP, loudness-match gain -> 46, 47, 48
         # auto master LUFS delta, TP margin, release score -> 49, 50, 51
         # auto master A/B loudness delta, matched TP, TP delta, dynamics delta, score -> 52..56
+        # auto master audition enabled, gain, loudness delta, true peak -> 57..60
 
         if len(args) < 27:
             return
@@ -122,6 +123,10 @@ class PluginBridge:
                 "abTruePeakDeltaDb": float(args[54]) if len(args) >= 55 else 0.0,
                 "abDynamicsDeltaDb": float(args[55]) if len(args) >= 56 else 0.0,
                 "abScore": float(args[56]) if len(args) >= 57 else 0.0,
+                "auditionMatch": bool(args[57]) if len(args) >= 58 else False,
+                "auditionGainDb": float(args[58]) if len(args) >= 59 else 0.0,
+                "auditionLoudnessDeltaDb": float(args[59]) if len(args) >= 60 else 0.0,
+                "auditionTruePeakDbTp": float(args[60]) if len(args) >= 61 else None,
             }
 
         with self.lock:

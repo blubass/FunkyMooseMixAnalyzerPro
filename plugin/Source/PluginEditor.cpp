@@ -345,10 +345,11 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::timerCallback()
                                                 + formatSigned(metrics.autoMasterAbLoudnessDeltaDb, "", 1)
                                                 + " / TP " + formatSigned(metrics.autoMasterAbTruePeakDeltaDb, "", 1)
                                               : "N/A"},
-        {"AM Listen", metrics.autoMasterEnabled ? (metrics.autoMasterAuditionMatch ? "Matched "
-                                                    + formatSigned(metrics.autoMasterAuditionGainDb, " dB")
-                                                  : "Print")
-                                                : "N/A"},
+        {"AM Listen/Guard", metrics.autoMasterEnabled ? (metrics.autoMasterAuditionMatch ? "M " + formatSigned(metrics.autoMasterAuditionGainDb, " dB")
+                                                       : juce::String("Print"))
+                                                       + " / R " + juce::String(metrics.autoMasterGovernorRiskScore, 0)
+                                                       + " / " + juce::String(metrics.autoMasterRecommendedStrength, 0) + "%"
+                                                     : "N/A"},
         {"Clip/Worst", juce::String(metrics.clippedPercent, 3) + " / " + juce::String(metrics.worstClippedPercent, 3) + "%"},
         {"TP Margin", hasTruePeak ? formatSigned(truePeakMargin, " dB") : "N/A"},
         {"Worst TP", formatDbTp(metrics.worstTruePeakDb)},
@@ -560,6 +561,9 @@ void FunkyMooseMixAnalyzerAudioProcessorEditor::smoothDisplayMetrics(const fmma:
     metrics.autoMasterAuditionGainDb = smoothValue(metrics.autoMasterAuditionGainDb, raw.autoMasterAuditionGainDb, amount);
     metrics.autoMasterAuditionLoudnessDeltaDb = smoothValue(metrics.autoMasterAuditionLoudnessDeltaDb, raw.autoMasterAuditionLoudnessDeltaDb, amount);
     metrics.autoMasterAuditionTruePeakDbTp = smoothAudioDbValue(metrics.autoMasterAuditionTruePeakDbTp, raw.autoMasterAuditionTruePeakDbTp);
+    metrics.autoMasterGovernorRiskScore = smoothValue(metrics.autoMasterGovernorRiskScore, raw.autoMasterGovernorRiskScore, amount);
+    metrics.autoMasterRecommendedStrength = smoothValue(metrics.autoMasterRecommendedStrength, raw.autoMasterRecommendedStrength, amount);
+    metrics.autoMasterStrengthTrim = smoothValue(metrics.autoMasterStrengthTrim, raw.autoMasterStrengthTrim, amount);
 
     for (size_t i = 0; i < fmma::bandCount; ++i)
     {
@@ -969,6 +973,11 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildTextReport(
                        : "N/A")
                << "\n";
         report << "Auto Master A/B Dynamics Delta: " << formatSigned(sourceMetrics.autoMasterAbDynamicsDeltaDb, " dB") << "\n";
+        report << "Auto Master Governor Risk: " << juce::String(sourceMetrics.autoMasterGovernorRiskScore, 0) << "/100\n";
+        report << "Auto Master Recommended Strength: " << juce::String(sourceMetrics.autoMasterRecommendedStrength, 0) << "%";
+        if (sourceMetrics.autoMasterStrengthTrim > 0.1f)
+            report << " (trim " << juce::String(sourceMetrics.autoMasterStrengthTrim, 0) << "%)";
+        report << "\n";
     }
     report << "Verdict: " << sourceAssessment.verdictTitle << "\n";
     report << "Mix Score: " << sourceAssessment.overallScore << "/100\n";
@@ -1257,6 +1266,9 @@ juce::String FunkyMooseMixAnalyzerAudioProcessorEditor::buildJsonReport(
     setJsonProperty(autoMasterJson, "auditionGainDb", jsonNumber(sourceMetrics.autoMasterAuditionGainDb));
     setJsonProperty(autoMasterJson, "auditionLoudnessDeltaDb", jsonNumber(sourceMetrics.autoMasterAuditionLoudnessDeltaDb));
     setJsonProperty(autoMasterJson, "auditionTruePeakDbTp", jsonAudioNumber(sourceMetrics.autoMasterAuditionTruePeakDbTp));
+    setJsonProperty(autoMasterJson, "governorRiskScore", jsonNumber(sourceMetrics.autoMasterGovernorRiskScore));
+    setJsonProperty(autoMasterJson, "recommendedStrengthPercent", jsonNumber(sourceMetrics.autoMasterRecommendedStrength));
+    setJsonProperty(autoMasterJson, "strengthTrimPercent", jsonNumber(sourceMetrics.autoMasterStrengthTrim));
     setJsonProperty(root, "autoMaster", autoMasterJson);
 
     auto measurements = juce::var { new juce::DynamicObject() };

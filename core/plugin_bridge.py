@@ -78,6 +78,7 @@ class PluginBridge:
         # auto master LUFS delta, TP margin, release score -> 49, 50, 51
         # auto master A/B loudness delta, matched TP, TP delta, dynamics delta, score -> 52..56
         # auto master audition enabled, gain, loudness delta, true peak -> 57..60
+        # auto master governor risk, recommended strength, strength trim -> 61..63
 
         if len(args) < 27:
             return
@@ -127,6 +128,9 @@ class PluginBridge:
                 "auditionGainDb": float(args[58]) if len(args) >= 59 else 0.0,
                 "auditionLoudnessDeltaDb": float(args[59]) if len(args) >= 60 else 0.0,
                 "auditionTruePeakDbTp": float(args[60]) if len(args) >= 61 else None,
+                "governorRiskScore": float(args[61]) if len(args) >= 62 else 0.0,
+                "recommendedStrengthPercent": float(args[62]) if len(args) >= 63 else 0.0,
+                "strengthTrimPercent": float(args[63]) if len(args) >= 64 else 0.0,
             }
 
         with self.lock:

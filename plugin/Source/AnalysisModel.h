@@ -143,6 +143,9 @@ struct AnalyzerMetrics
     float autoMasterAuditionGainDb = 0.0f;
     float autoMasterAuditionLoudnessDeltaDb = 0.0f;
     float autoMasterAuditionTruePeakDbTp = -120.0f;
+    float autoMasterGovernorRiskScore = 0.0f;
+    float autoMasterRecommendedStrength = 0.0f;
+    float autoMasterStrengthTrim = 0.0f;
     std::array<float, bandCount> bandPercents {};
     std::array<float, bandCount> bandCorrelations { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
     std::array<float, bandCount> bandSideRatiosDb { -120.0f, -120.0f, -120.0f, -120.0f, -120.0f, -120.0f };

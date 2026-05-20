@@ -752,6 +752,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::resetAutoMasterState() noexcept
     autoMasterAuditionGainDb.store(0.0f, std::memory_order_relaxed);
     autoMasterAuditionLoudnessDeltaDb.store(0.0f, std::memory_order_relaxed);
     autoMasterAuditionTruePeakDbTp.store(-120.0f, std::memory_order_relaxed);
+    autoMasterGovernorRiskScore.store(0.0f, std::memory_order_relaxed);
+    autoMasterRecommendedStrength.store(0.0f, std::memory_order_relaxed);
+    autoMasterStrengthTrim.store(0.0f, std::memory_order_relaxed);
 }
 
 void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<float>& buffer,
@@ -1227,6 +1230,40 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
         abScore = juce::jlimit(0.0f, 100.0f, abScore * (0.65f + (0.35f * trust)));
     }
 
+    const auto governorReductionLoadDb = displayedAutoMasterGlueReductionDb + displayedAutoMasterLimiterReductionDb;
+    const auto governorMovementLoad = (std::abs(smoothedAutoMasterGainDb) * 0.30f)
+        + std::abs(smoothedAutoMasterLowShelfDb)
+        + std::abs(smoothedAutoMasterPresenceDb)
+        + std::abs(smoothedAutoMasterAirShelfDb)
+        + (std::abs(smoothedAutoMasterSideGain - 1.0f) * 10.0f)
+        + governorReductionLoadDb;
+    auto governorRiskScore = 0.0f;
+    if (hasLoudness || hasTruePeak)
+    {
+        governorRiskScore += juce::jlimit(0.0f, 24.0f, juce::jmax(0.0f, std::abs(smoothedAutoMasterGainDb) - 4.5f) * 6.0f);
+        governorRiskScore += juce::jlimit(0.0f, 24.0f, juce::jmax(0.0f, governorReductionLoadDb - 2.5f) * 7.5f);
+        governorRiskScore += juce::jlimit(0.0f, 18.0f, juce::jmax(0.0f, governorMovementLoad - 5.0f) * 3.0f);
+        governorRiskScore += hasLoudness
+            ? juce::jlimit(0.0f, 16.0f, juce::jmax(0.0f, std::abs(projectedLufsDelta) - 1.0f) * 8.0f)
+            : 0.0f;
+        governorRiskScore += hasTruePeak && projectedTruePeakMargin < 0.0f
+            ? juce::jlimit(0.0f, 18.0f, -projectedTruePeakMargin * 9.0f)
+            : 0.0f;
+        governorRiskScore += abScore > 0.0f
+            ? juce::jlimit(0.0f, 16.0f, juce::jmax(0.0f, 68.0f - abScore) * 0.35f)
+            : 0.0f;
+        governorRiskScore += releaseScore > 0.0f
+            ? juce::jlimit(0.0f, 12.0f, juce::jmax(0.0f, 72.0f - releaseScore) * 0.25f)
+            : 0.0f;
+        governorRiskScore += juce::jlimit(0.0f, 16.0f, (1.0f - trust) * 16.0f);
+    }
+    governorRiskScore = juce::jlimit(0.0f, 100.0f, governorRiskScore);
+    const auto recommendedTrim = governorRiskScore > 35.0f
+        ? juce::jlimit(0.0f, 55.0f, (governorRiskScore - 35.0f) * 0.85f)
+        : 0.0f;
+    const auto recommendedStrength = juce::jlimit(0.0f, 100.0f, strengthPercent - recommendedTrim);
+    const auto strengthTrim = juce::jmax(0.0f, strengthPercent - recommendedStrength);
+
     autoMasterProjectedLufs.store(projectedLufs, std::memory_order_relaxed);
     autoMasterProjectedTruePeakDbTp.store(projectedTruePeak, std::memory_order_relaxed);
     autoMasterLoudnessMatchGainDb.store(loudnessMatchGainDb, std::memory_order_relaxed);
@@ -1241,6 +1278,9 @@ void FunkyMooseMixAnalyzerAudioProcessor::applyAutoMaster(juce::AudioBuffer<floa
     autoMasterAuditionGainDb.store(auditionGainDb, std::memory_order_relaxed);
     autoMasterAuditionLoudnessDeltaDb.store(auditionLoudnessDeltaDb, std::memory_order_relaxed);
     autoMasterAuditionTruePeakDbTp.store(auditionTruePeakDbTp, std::memory_order_relaxed);
+    autoMasterGovernorRiskScore.store(governorRiskScore, std::memory_order_relaxed);
+    autoMasterRecommendedStrength.store(recommendedStrength, std::memory_order_relaxed);
+    autoMasterStrengthTrim.store(strengthTrim, std::memory_order_relaxed);
 
     if (auditionMatchEnabled && std::abs(auditionGainDb) > 0.001f)
     {
@@ -2063,6 +2103,9 @@ fmma::AnalyzerMetrics FunkyMooseMixAnalyzerAudioProcessor::getMetrics() const
     metrics.autoMasterAuditionGainDb = autoMasterAuditionGainDb.load(std::memory_order_relaxed);
     metrics.autoMasterAuditionLoudnessDeltaDb = autoMasterAuditionLoudnessDeltaDb.load(std::memory_order_relaxed);
     metrics.autoMasterAuditionTruePeakDbTp = autoMasterAuditionTruePeakDbTp.load(std::memory_order_relaxed);
+    metrics.autoMasterGovernorRiskScore = autoMasterGovernorRiskScore.load(std::memory_order_relaxed);
+    metrics.autoMasterRecommendedStrength = autoMasterRecommendedStrength.load(std::memory_order_relaxed);
+    metrics.autoMasterStrengthTrim = autoMasterStrengthTrim.load(std::memory_order_relaxed);
 
     for (auto band = 0; band < fmma::bandCount; ++band)
     {

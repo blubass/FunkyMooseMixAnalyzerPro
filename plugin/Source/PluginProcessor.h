@@ -240,6 +240,9 @@ private:
     std::atomic<float> autoMasterAuditionGainDb {0.0f};
     std::atomic<float> autoMasterAuditionLoudnessDeltaDb {0.0f};
     std::atomic<float> autoMasterAuditionTruePeakDbTp {-120.0f};
+    std::atomic<float> autoMasterGovernorRiskScore {0.0f};
+    std::atomic<float> autoMasterRecommendedStrength {0.0f};
+    std::atomic<float> autoMasterStrengthTrim {0.0f};
     std::array<std::atomic<float>, fmma::bandCount> bandPercents {};
     std::array<std::atomic<float>, fmma::bandCount> bandCorrelations {};
     std::array<std::atomic<float>, fmma::bandCount> bandSideRatiosDb {};

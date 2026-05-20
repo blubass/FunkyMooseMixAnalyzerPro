@@ -98,6 +98,9 @@ void OscSender::send(const fmma::AnalyzerMetrics& m,
     msg.addFloat32(m.autoMasterAuditionGainDb);
     msg.addFloat32(m.autoMasterAuditionLoudnessDeltaDb);
     msg.addFloat32(m.autoMasterAuditionTruePeakDbTp);
+    msg.addFloat32(m.autoMasterGovernorRiskScore);
+    msg.addFloat32(m.autoMasterRecommendedStrength);
+    msg.addFloat32(m.autoMasterStrengthTrim);
 
     sender.send(msg);
 }

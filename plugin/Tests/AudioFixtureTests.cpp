@@ -656,6 +656,11 @@ void autoMasterRaisesQuietProgramMaterial()
            "auto-master A/B true peak should include the loudness-match trim");
     expect(metrics.autoMasterAbScore >= 0.0f && metrics.autoMasterAbScore <= 100.0f,
            "auto-master A/B score should stay in a bounded professional range");
+    expect(metrics.autoMasterGovernorRiskScore >= 0.0f && metrics.autoMasterGovernorRiskScore <= 100.0f,
+           "auto-master governor risk should stay in a bounded professional range");
+    expect(metrics.autoMasterRecommendedStrength > 0.0f
+               && metrics.autoMasterRecommendedStrength <= metrics.autoMasterStrength + 0.1f,
+           "auto-master governor should recommend a realistic strength at or below the current setting");
 }
 
 void autoMasterAuditionMatchTrimsBoostForHonestAB()
@@ -683,6 +688,8 @@ void autoMasterAuditionMatchTrimsBoostForHonestAB()
            "auto-master audition match should keep the comparison close to the original loudness");
     expect(metrics.autoMasterAuditionTruePeakDbTp <= metrics.autoMasterProjectedTruePeakDbTp,
            "auto-master audition true peak should include the match trim");
+    expect(metrics.autoMasterStrengthTrim >= 0.0f,
+           "auto-master governor strength trim should not report a negative value");
 }
 
 void autoMasterReducesHotProgramMaterial()

@@ -13,7 +13,7 @@ class PluginBridge:
         self.port = port
         self.metrics = None
         self.last_update = 0
-        self.lock = threading.Lock()
+        self.condition = threading.Condition()
         self._server = None
         self._server_thread = None
 
@@ -154,7 +154,7 @@ class PluginBridge:
                 "action": str(args[77]),
             }
 
-        with self.lock:
+        with self.condition:
             self.metrics = {
                 "loudness": {
                     "integrated": args[0],
@@ -197,10 +197,25 @@ class PluginBridge:
                 "targetMatch": target_match,
             }
             self.last_update = time.time()
+            self.condition.notify_all()
 
     def get_latest_metrics(self):
-        with self.lock:
+        with self.condition:
             if not self.metrics:
+                return None
+            
+            # Check for timeout (2 seconds)
+            if time.time() - self.last_update > 2.0:
+                return None
+                
+            return self.metrics
+
+    def wait_for_metrics(self, timeout=1.0):
+        """Wait for new metrics to arrive and return them. Returns None on timeout."""
+        with self.condition:
+            # Wait until notified or timeout
+            notified = self.condition.wait(timeout=timeout)
+            if not notified or not self.metrics:
                 return None
             
             # Check for timeout (2 seconds)

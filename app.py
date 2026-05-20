@@ -118,6 +118,20 @@ def get_bin_path(cmd):
 FFMPEG_CMD = get_bin_path("ffmpeg")
 FFPROBE_CMD = get_bin_path("ffprobe")
 
+from flask import Response
+
+@app.route('/stream')
+def stream_live_metrics():
+    def event_stream():
+        while True:
+            metrics = bridge.wait_for_metrics(timeout=1.0)
+            if metrics:
+                yield f"data: {json.dumps(metrics)}\n\n"
+            else:
+                # Send a ping to keep connection alive
+                yield ": ping\n\n"
+    return Response(event_stream(), mimetype="text/event-stream")
+
 @app.route('/api/live-metrics')
 def get_live_metrics():
     metrics = bridge.get_latest_metrics()

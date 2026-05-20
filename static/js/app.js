@@ -1834,44 +1834,58 @@ checkSystem();
 
 // --- Live Plugin Monitor ---
 const LiveMonitor = {
-    interval: null,
+    eventSource: null,
     active: false,
     lastUpdate: 0,
     
     start() {
         if (this.active) return;
         this.active = true;
-        this.poll();
-        this.interval = setInterval(() => this.poll(), 500);
+        this.connect();
     },
     
     stop() {
         this.active = false;
-        clearInterval(this.interval);
+        if (this.eventSource) {
+            this.eventSource.close();
+            this.eventSource = null;
+        }
+        this.updateStatus(false);
     },
     
-    async poll() {
-        try {
-            const response = await fetch('/api/live-metrics');
-            const result = await response.json();
+    connect() {
+        if (this.eventSource) this.eventSource.close();
+        this.eventSource = new EventSource('/stream');
+        
+        this.eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            this.updateStatus(true);
+            this.lastUpdate = Date.now();
             
-            const indicator = document.getElementById('liveLinkIndicator');
-            const statusText = document.getElementById('liveStatusText');
-            
-            if (indicator && statusText) {
-                if (result && result.status === 'connected') {
-                    indicator.classList.remove('disconnected');
-                    indicator.classList.add('connected');
-                    statusText.textContent = 'Plugin: Live';
-                    this.lastUpdate = Date.now();
-                } else {
-                    indicator.classList.remove('connected');
-                    indicator.classList.add('disconnected');
-                    statusText.textContent = 'Plugin: Off';
-                }
+            // If there's an active dashboard function we could feed 'data' to it here
+            // e.g., if (window.updateLiveDashboard) updateLiveDashboard(data);
+        };
+        
+        this.eventSource.onerror = () => {
+            this.updateStatus(false);
+            // EventSource auto-reconnects, but we'll show disconnected
+        };
+    },
+    
+    updateStatus(connected) {
+        const indicator = document.getElementById('liveLinkIndicator');
+        const statusText = document.getElementById('liveStatusText');
+        
+        if (indicator && statusText) {
+            if (connected) {
+                indicator.classList.remove('disconnected');
+                indicator.classList.add('connected');
+                statusText.textContent = 'Plugin: Live';
+            } else {
+                indicator.classList.remove('connected');
+                indicator.classList.add('disconnected');
+                statusText.textContent = 'Plugin: Off';
             }
-        } catch (e) {
-            // Silently fail polling
         }
     }
 };

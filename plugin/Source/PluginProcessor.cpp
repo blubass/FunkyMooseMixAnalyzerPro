@@ -416,7 +416,7 @@ FunkyMooseMixAnalyzerAudioProcessor::FunkyMooseMixAnalyzerAudioProcessor()
         band.store(-120.0f, std::memory_order_relaxed);
 
 #ifndef MIX_ANALYZER_HEADLESS_TESTS
-    startTimerHz(6);
+    startTimerHz(30);
 #endif
 }
 
